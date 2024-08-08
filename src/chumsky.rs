@@ -1,6 +1,6 @@
 use core::fmt;
 use std::collections::HashMap;
-use std::fmt::Formatter;
+use std::fmt::{Display, Formatter};
 
 use chumsky::{prelude::*, stream::Stream};
 use chumsky::Parser;
@@ -9,8 +9,10 @@ use tower_lsp::lsp_types::SemanticTokenType;
 
 use crate::semantic_token::LEGEND_TYPE;
 
-/// This is the parser and interpreter for the 'Foo' language. See `tutorial.md` in the repository's root to learn
-/// about it.
+/// This is the parser and interpreter for a simplified Clojure grammar
+/// See the complete ANTLR 4 grammar here:
+/// https://github.com/antlr/grammars-v4/blob/master/clojure/Clojure.g4
+
 pub type Span = std::ops::Range<usize>;
 #[derive(Debug)]
 pub struct ImCompleteSemanticToken {
@@ -29,14 +31,50 @@ impl std::fmt::Display for NameToken {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct SymbolToken(String);
+pub enum SymbolToken {
+    Dot,
+    Slash,
+    Name(String),
+}
 
 impl std::fmt::Display for SymbolToken {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        match self {
+            SymbolToken::Dot => write!(f, "."),
+            SymbolToken::Slash => write!(f, "/"),
+            SymbolToken::Name(n) => write!(f, "{}", n),
+        }
     }
 }
 
+
+// Note this is a simplified lexer
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum LexerToken {
+    String(String),
+    Long(i64),
+    Nil,
+    Boolean(bool),
+    Symbol(SymbolToken),
+    NsSymbol(NameToken, SymbolToken),
+}
+
+impl Display for LexerToken {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LexerToken::String(s) => write!(f, "\"{}\"", s),
+            LexerToken::Long(n) => write!(f, "{}", n),
+            LexerToken::Nil => write!(f, "nil"),
+            LexerToken::Boolean(b) => write!(f, "{}", match b {
+                true => "true",
+                false => "false"
+            }),
+            LexerToken::Symbol(s) => write!(f, "{}", s),
+            LexerToken::NsSymbol(n, s) => write!(f, "{}/{}", n, s)
+        }
+    }
+}
+// TODO: continue here
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum SymbolLiteral {
@@ -44,12 +82,20 @@ pub enum SymbolLiteral {
     SimpleSymbol(SymbolToken),
 }
 
+impl fmt::Display for SymbolLiteral {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SymbolLiteral::NsSymbol(ns, s) => write!(f, ":{}/{}", ns, s),
+            SymbolLiteral::SimpleSymbol(s) => write!(f, ":{}", s),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum KeywordLiteral {
     SimpleKeyword(SymbolLiteral),
     MacroKeyword(SymbolLiteral),
 }
-
 
 impl fmt::Display for KeywordLiteral {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -59,7 +105,6 @@ impl fmt::Display for KeywordLiteral {
         }
     }
 }
-
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Literal {
@@ -71,7 +116,6 @@ pub enum Literal {
     Keyword(KeywordLiteral),
     Symbol(String),
 }
-
 
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -88,22 +132,31 @@ impl fmt::Display for Literal {
 }
 
 
-impl fmt::Display for SymbolLiteral {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            SymbolLiteral::NsSymbol(ns, s) => write!(f, ":{}/{}", ns, s),
-            SymbolLiteral::SimpleSymbol(s) => write!(f, ":{}", s),
-        }
-    }
-}
+fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error=Simple<char>> {
+    // A parser for comments
+    let comment = just(";").then(take_until(just('\n'))).padded();
 
+    // A parser for simple strings
+    let str_ = just('"')
+        .ignore_then(filter(|c| *c != '"').repeated())
+        .then_ignore(just('"'))
+        .collect::<String>()
+        .map(LexerToken::String);
 
-fn lexer() -> impl Parser<char, Vec<(Literal, Span)>, Error=Simple<char>> {
-    // A parser for numbers
-    let num = text::int(10)
+    // A parser for longs
+    let long_number =
+        text::int::<_, Simple<char>>(10)
+            .map(|s| LexerToken::Long(s.parse().unwrap()));
+    // TODO: negative numbers
+    // TODO: floats
+    // TODO: floats, other bases
+    /*
+    let float_number = text::int(10)
         .chain::<char, _, _>(just('.').chain(text::digits(10)).or_not().flatten())
         .collect::<String>()
-        .map(Literal::Number);
+        .map(|s| LexerToken::Float(Float::parse(s)));
+    */
+    let number = long_number;
 
     // A parser for characters (simplified)
     /*
@@ -114,18 +167,48 @@ fn lexer() -> impl Parser<char, Vec<(Literal, Span)>, Error=Simple<char>> {
         .map(|s| Literal::Character('x'));
     */
 
-    // A parser for strings
-    let str_ = just('"')
-        .ignore_then(filter(|c| *c != '"').repeated())
-        .then_ignore(just('"'))
-        .collect::<String>()
-        .map(Literal::Number);
-    /*
-        let symbol_ = just(':')
-            .ignore_then(symbol_)
-            .collect::<String>()
-            .map(KeywordLiteral::SimpleKeyword);
+    // TODO: use whitespace lexer for last part:
+    let symbol_head = none_of::<_, _, Simple<char>>("0123456789^`\\\"#~@:/%()[]{} \n\r\t");
+    let symbol_rest =
+        choice::<_, Simple<char>>((
+            symbol_head.clone(),
+            one_of("0123456789"),
+            just('.')));
 
+    let name =
+        symbol_head
+            .then(symbol_rest.clone())
+            .then(just::<_, _, Simple<char>>(':')
+                .then(symbol_rest.repeated().at_least(1)))
+            .map(|((sh, rs), (c, rest))| {
+                let mut s = String::new();
+                s.push(sh);
+                s.push(rs);
+                s.push(c);
+                for x in rest { s.push(x); }
+                NameToken(s)
+            }
+            );
+
+    let symbol =
+        name
+            .map(|NameToken(nt)| LexerToken::Symbol(SymbolToken::Name(nt)));
+    /*
+        choice((
+            just("."),
+            //just("/"),
+            name.map(|NameToken(s)| s)))
+            .map(SymbolToken);
+            */
+
+    /*
+    let ns_symbol =
+        name
+            .then(just('/'))
+            .then(symbol)
+            .map(|a, b| LexerToken::NsSymbol(a, b));
+*/
+    /*
         let simple_keyword_ = just(':')
             .ignore_then(symbol_)
             .collect::<String>()
@@ -137,7 +220,7 @@ fn lexer() -> impl Parser<char, Vec<(Literal, Span)>, Error=Simple<char>> {
             .ignore_then(symbol_)
             .collect::<String>()
             .map(_ => KeywordLiteral::MacroKeyword("x", ))
-    */
+*/
 
     // A parser for keywords
     /*
@@ -152,22 +235,21 @@ fn lexer() -> impl Parser<char, Vec<(Literal, Span)>, Error=Simple<char>> {
     // A parser for control characters (delimiters, semicolons, etc.)
     //let ctrl = one_of("()[]{};,").map(Literal::Ctrl);
 
-    // A parser for identifiers and keywords
-    let ident = text::ident().map(|ident: String| match ident.as_str() {
-        "true" => Literal::Bool(true),
-        "false" => Literal::Bool(false),
-        "nil" => Literal::Nil,
-        s => Literal::Symbol(s.to_string()),
-    });
+    let boolean_true = text::keyword("true").map(|_| LexerToken::Boolean(true));
+    let boolean_false = text::keyword("false").map(|_| LexerToken::Boolean(false));
+    let boolean = boolean_true.or(boolean_false);
+
+    let nil = text::keyword("nil").map(|_| LexerToken::Nil);
 
     // A single token can be one of the above
-    let token = num
-        //.or(char_)
-        .or(str_)
-        .or(ident)
-        .recover_with(skip_then_retry_until([]));
-
-    let comment = just(";").then(take_until(just('\n'))).padded();
+    let token =
+        choice((
+            str_,
+            boolean,
+            nil,
+            number,
+            symbol))
+            .recover_with(skip_then_retry_until([]));
 
     token
         .padded_by(comment.repeated())
@@ -368,7 +450,7 @@ fn expr_parser() -> impl Parser<Literal, Spanned<Expr>, Error=Simple<Literal>> +
     })
 }
 
-pub fn funcs_parser() -> impl Parser<Literal, HashMap<String, Func>, Error=Simple<Literal>> + Clone {
+pub fn funcs_parser() -> impl Parser<LexerToken, HashMap<String, Func>, Error=Simple<LexerToken>> + Clone {
     let ident = filter_map(|span, tok| match tok {
         //Literal::Ident(ident) => Ok(ident),
         _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
@@ -463,10 +545,23 @@ pub fn parse(src: &str) -> ParserResult {
         let semantic_tokens = tokens
             .iter()
             .filter_map(|(token, span)| match token {
-                Literal::Nil => None,
-                Literal::Bool(_) => None,
-
-                Literal::Number(_) => Some(ImCompleteSemanticToken {
+                LexerToken::Nil | LexerToken::Boolean(_) => Some(ImCompleteSemanticToken {
+                    start: span.start,
+                    length: span.len(),
+                    token_type: LEGEND_TYPE
+                        .iter()
+                        .position(|item| item == &SemanticTokenType::KEYWORD)
+                        .unwrap(),
+                }),
+                LexerToken::String(_) => Some(ImCompleteSemanticToken {
+                    start: span.start,
+                    length: span.len(),
+                    token_type: LEGEND_TYPE
+                        .iter()
+                        .position(|item| item == &SemanticTokenType::STRING)
+                        .unwrap(),
+                }),
+                LexerToken::Long(_) => Some(ImCompleteSemanticToken {
                     start: span.start,
                     length: span.len(),
                     token_type: LEGEND_TYPE
@@ -474,38 +569,8 @@ pub fn parse(src: &str) -> ParserResult {
                         .position(|item| item == &SemanticTokenType::NUMBER)
                         .unwrap(),
                 }),
-                Literal::Str(_) => Some(ImCompleteSemanticToken {
-                    start: span.start,
-                    length: span.len(),
-                    token_type: LEGEND_TYPE
-                        .iter()
-                        .position(|item| item == &SemanticTokenType::STRING)
-                        .unwrap(),
-                }),
-                Literal::Character(_) => Some(ImCompleteSemanticToken {
-                    start: span.start,
-                    length: span.len(),
-                    token_type: LEGEND_TYPE
-                        .iter()
-                        .position(|item| item == &SemanticTokenType::STRING)
-                        .unwrap(),
-                }),
-                Literal::Keyword(kwl) => Some(ImCompleteSemanticToken {
-                    start: span.start,
-                    length: span.len(),
-                    token_type: LEGEND_TYPE
-                        .iter()
-                        .position(|item| item == &SemanticTokenType::STRING)
-                        .unwrap(),
-                }),
-                Literal::Symbol(kwl) => Some(ImCompleteSemanticToken {
-                    start: span.start,
-                    length: span.len(),
-                    token_type: LEGEND_TYPE
-                        .iter()
-                        .position(|item| item == &SemanticTokenType::FUNCTION)
-                        .unwrap(),
-                }),
+                LexerToken::Symbol(_) => { todo!() }
+                LexerToken::NsSymbol(_, _) => { todo!() }
             })
             .collect::<Vec<_>>();
         let len = src.chars().count();
@@ -531,5 +596,82 @@ pub fn parse(src: &str) -> ParserResult {
         ast,
         parse_errors,
         semantic_tokens,
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lex_single(input: &str) -> (LexerToken, Span) {
+        let actual = lexer().parse(input);
+        assert!(actual.is_ok());
+        let tokens = actual.unwrap();
+        assert_eq!(1, tokens.len());
+        let (t, s) = tokens.first().unwrap();
+        (t.clone(), s.clone())
+    }
+
+    #[test]
+    fn lexer_can_parse_long() {
+        let (lt, span) = lex_single("42");
+        assert_eq!(LexerToken::Long(42), lt);
+        assert_eq!(2, span.len());
+        assert_eq!(0, span.start);
+        assert_eq!(2, span.end);
+    }
+
+    #[test]
+    fn lexer_can_parse_nil() {
+        let (t, _span) = lex_single("nil");
+        assert_eq!(LexerToken::Nil, t);
+    }
+
+    #[test]
+    fn lexer_can_parse_boolean_true() {
+        let (t, _span) = lex_single("true");
+        assert_eq!(LexerToken::Boolean(true), t);
+    }
+    #[test]
+    fn lexer_can_parse_boolean_false() {
+        let (t, _span) = lex_single("false");
+        assert_eq!(LexerToken::Boolean(false), t);
+    }
+
+    #[test]
+    fn lexer_can_parse_string() {
+        let (t, _span) = lex_single("\"foo\"");
+        assert_eq!(LexerToken::String(String::from("foo")), t);
+    }
+
+    #[test]
+    fn lexer_can_parse_symbol_dot() {
+        let (t, _span) = lex_single(".");
+        assert_eq!(LexerToken::Symbol(SymbolToken::Dot), t);
+    }
+
+    #[test]
+    fn lexer_can_parse_symbol_slash() {
+        let (t, span) = lex_single("/");
+        assert_eq!(LexerToken::Symbol(SymbolToken::Slash), t);
+    }
+
+    #[test]
+    fn lexer_can_parse_symbol_name_simple() {
+        let (t, _span) = lex_single("foo");
+        assert_eq!(LexerToken::Symbol(SymbolToken::Name(String::from("foo"))), t);
+    }
+
+    #[test]
+    fn lexer_can_parse_symbol_name_dashed() {
+        let (t, _span) = lex_single("foo-bar");
+        assert_eq!(LexerToken::Symbol(SymbolToken::Name(String::from("foo-bar"))), t);
+    }
+
+    #[test]
+    fn lexer_can_parse_symbol_with_namespace() {
+        let (t, _span) = lex_single("name.space/foo");
+        assert_eq!(LexerToken::NsSymbol(NameToken(String::from("name.space")), SymbolToken::Name(String::from("foo"))), t);
     }
 }
