@@ -696,4 +696,33 @@ mod tests {
         let (t, _span) = lex_single("name.space/foo");
         assert_eq!(LexerToken::NsSymbol(NameToken(String::from("name.space")), SymbolToken::Name(String::from("foo"))), t);
     }
+
+    #[test]
+    fn lexer_can_parse_multiple_tokens_two_true_nil() {
+        let actual = lexer().parse("true nil");
+        assert_eq!(true, actual.is_ok());
+        let tokens = actual.unwrap();
+        assert_eq!(2, tokens.len());
+        match &tokens[..] {
+            [(t1, s1), (t2,s2)] => {
+                assert_eq!(&LexerToken::Boolean(true), t1);
+                assert_eq!(&LexerToken::Nil, t2);
+            },
+            _ => assert!(false)
+        }
+    }
+    #[test]
+    fn lexer_can_parse_multiple_tokens_two_with_comment() {
+        let actual = lexer().parse("1\n;; comment\n2");
+        assert_eq!(true, actual.is_ok());
+        let tokens = actual.unwrap();
+        assert_eq!(2, tokens.len());
+        match &tokens[..] {
+            [(t1, s1), (t2,s2)] => {
+                assert_eq!(&LexerToken::Long(1), t1);
+                assert_eq!(&LexerToken::Long(2), t2);
+            },
+            _ => assert!(false)
+        }
+    }
 }
