@@ -300,6 +300,28 @@ pub enum BinaryOp {
 
 pub type Spanned<T> = (T, Span);
 
+#[derive(Debug)]
+pub enum FormExpr {
+    Literal(LiteralExpr),
+    List(ListExpr),
+    Vector(VectorExpr),
+    Map(MapExpr),
+    // No reader macros
+    // ReaderMacro(ReaderMacroExpr)
+}
+
+#[derive(Debug)]
+pub enum LiteralExpr {}
+
+#[derive(Debug)]
+pub enum ListExpr {}
+
+#[derive(Debug)]
+pub enum VectorExpr {}
+
+#[derive(Debug)]
+pub enum MapExpr {}
+
 // An expression node in the AST. Children are spanned so we can generate useful runtime errors.
 #[derive(Debug)]
 pub enum Expr {
