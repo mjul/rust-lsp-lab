@@ -53,49 +53,6 @@ pub fn get_completion_of(
         Expr::Local(local) => {
             !(ident_offset >= local.1.start && ident_offset < local.1.end)
         }
-        Expr::Let(name, lhs, rest, _name_span) => {
-            definition_map.insert(
-                name.clone(),
-                ImCompleteCompletionItem::Variable(name.clone()),
-            );
-            match get_completion_of(lhs, definition_map, ident_offset) {
-                true => get_completion_of(rest, definition_map, ident_offset),
-                false => false,
-            }
-        }
-        Expr::Then(first, second) => match get_completion_of(first, definition_map, ident_offset) {
-            true => get_completion_of(second, definition_map, ident_offset),
-            false => false,
-        },
-        Expr::Binary(lhs, _op, rhs) => match get_completion_of(lhs, definition_map, ident_offset) {
-            true => get_completion_of(rhs, definition_map, ident_offset),
-            false => false,
-        },
-        Expr::Call(callee, args) => {
-            match get_completion_of(callee, definition_map, ident_offset) {
-                true => {}
-                false => return false,
-            }
-            for expr in &args.0 {
-                match get_completion_of(expr, definition_map, ident_offset) {
-                    true => continue,
-                    false => return false,
-                }
-            }
-            true
-        }
-        Expr::If(test, consequent, alternative) => {
-            match get_completion_of(test, definition_map, ident_offset) {
-                true => {}
-                false => return false,
-            }
-            match get_completion_of(consequent, definition_map, ident_offset) {
-                true => {}
-                false => return false,
-            }
-            get_completion_of(alternative, definition_map, ident_offset)
-        }
-        Expr::Print(expr) => get_completion_of(expr, definition_map, ident_offset),
         Expr::List(lst) => {
             for expr in lst {
                 match get_completion_of(expr, definition_map, ident_offset) {
