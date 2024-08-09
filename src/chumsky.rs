@@ -212,7 +212,7 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
     let ns_symbol = name
         .then(just('/'))
         .then(symbol_token)
-        .map(|((n, slash), symbol)| LexerToken::NsSymbol(n, symbol));
+        .map(|((n, _slash), symbol)| LexerToken::NsSymbol(n, symbol));
 
     /*
             let simple_keyword_ = just(':')
