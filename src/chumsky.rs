@@ -134,10 +134,10 @@ impl fmt::Display for Literal {
 
 fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error=Simple<char>> {
     // A parser for comments
-    let comment = just(";").then(take_until(just('\n'))).padded();
+    let comment = just(";").then(take_until(text::newline::<Simple<char>>())).padded();
 
     // A parser for simple strings
-    let str_ = just('"')
+    let str_ = just::<_, _, Simple<char>>('"')
         .ignore_then(filter(|c| *c != '"').repeated())
         .then_ignore(just('"'))
         .collect::<String>()
@@ -172,20 +172,23 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error=Simple<char>> {
     let symbol_rest =
         choice::<_, Simple<char>>((
             symbol_head.clone(),
-            one_of("0123456789"),
-            just('.')));
+            one_of::<_, _, Simple<char>>("0123456789"),
+            just::<_, _, Simple<char>>('.')));
 
     let name =
         symbol_head
-            .then(symbol_rest.clone())
+            .then(symbol_rest.clone().repeated())
             .then(just::<_, _, Simple<char>>(':')
-                .then(symbol_rest.repeated().at_least(1)))
-            .map(|((sh, rs), (c, rest))| {
+                .then(symbol_rest.repeated().at_least(1))
+                .repeated())
+            .map(|((sh, srs), colon_rests)| {
                 let mut s = String::new();
                 s.push(sh);
-                s.push(rs);
-                s.push(c);
-                for x in rest { s.push(x); }
+                for x in srs { s.push(x); }
+                for (colon, symbol_rests) in colon_rests {
+                    s.push(colon);
+                    for x in symbol_rests { s.push(x); }
+                }
                 NameToken(s)
             }
             );
@@ -235,11 +238,11 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error=Simple<char>> {
     // A parser for control characters (delimiters, semicolons, etc.)
     //let ctrl = one_of("()[]{};,").map(Literal::Ctrl);
 
-    let boolean_true = text::keyword("true").map(|_| LexerToken::Boolean(true));
+    let boolean_true = text::keyword::<_, _, Simple<char>>("true").map(|_| LexerToken::Boolean(true));
     let boolean_false = text::keyword("false").map(|_| LexerToken::Boolean(false));
     let boolean = boolean_true.or(boolean_false);
 
-    let nil = text::keyword("nil").map(|_| LexerToken::Nil);
+    let nil = text::keyword::<_, _, Simple<char>>("nil").map(|_| LexerToken::Nil);
 
     // A single token can be one of the above
     let token =
@@ -680,7 +683,13 @@ mod tests {
     }
 
     #[test]
-    fn lexer_can_parse_symbol_name_simple() {
+    fn lexer_can_parse_symbol_name_simple_single_letter() {
+        let (t, _span) = lex_single("x");
+        assert_eq!(LexerToken::Symbol(SymbolToken::Name(String::from("x"))), t);
+    }
+
+    #[test]
+    fn lexer_can_parse_symbol_name_simple_word() {
         let (t, _span) = lex_single("foo");
         assert_eq!(LexerToken::Symbol(SymbolToken::Name(String::from("foo"))), t);
     }
@@ -704,10 +713,10 @@ mod tests {
         let tokens = actual.unwrap();
         assert_eq!(2, tokens.len());
         match &tokens[..] {
-            [(t1, s1), (t2,s2)] => {
+            [(t1, s1), (t2, s2)] => {
                 assert_eq!(&LexerToken::Boolean(true), t1);
                 assert_eq!(&LexerToken::Nil, t2);
-            },
+            }
             _ => assert!(false)
         }
     }
@@ -718,10 +727,44 @@ mod tests {
         let tokens = actual.unwrap();
         assert_eq!(2, tokens.len());
         match &tokens[..] {
-            [(t1, s1), (t2,s2)] => {
+            [(t1, s1), (t2, s2)] => {
                 assert_eq!(&LexerToken::Long(1), t1);
                 assert_eq!(&LexerToken::Long(2), t2);
-            },
+            }
+            _ => assert!(false)
+        }
+    }
+
+    #[test]
+    fn lexer_can_parse_multiple_tokens_many() {
+        let actual = lexer().parse(r#"
+            ;;comment
+            nil
+            true
+            false
+            1
+            "foo-string"
+            .
+            /
+            foo
+            foo.bar/baz
+            "#);
+        assert_eq!(true, actual.is_ok());
+        let tokens = actual.unwrap();
+        assert_eq!(9, tokens.len());
+        match &tokens[..] {
+            [(t1, _), (t2, _), (t3, _), (t4, _), (t5, _), (t6, _), (t7, _), (t8, _), (t9, _), ] =>
+                {
+                    assert_eq!(&LexerToken::Nil, t1);
+                    assert_eq!(&LexerToken::Boolean(true), t2);
+                    assert_eq!(&LexerToken::Boolean(false), t3);
+                    assert_eq!(&LexerToken::Long(1), t4);
+                    assert_eq!(&LexerToken::String("foo-string".to_string()), t5);
+                    assert_eq!(&LexerToken::Symbol(SymbolToken::Dot), t6);
+                    assert_eq!(&LexerToken::Symbol(SymbolToken::Slash), t7);
+                    assert_eq!(&LexerToken::Symbol(SymbolToken::Name(String::from("foo"))), t8);
+                    assert_eq!(&LexerToken::NsSymbol(NameToken(String::from("foo.bar")), SymbolToken::Name(String::from("baz"))), t9);
+                }
             _ => assert!(false)
         }
     }
