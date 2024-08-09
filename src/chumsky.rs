@@ -384,18 +384,33 @@ pub struct Func {
     pub span: Span,
 }
 
-/// Parse tokens into a LiteralExpr AST node
-fn literal_expr_parser(
-) -> impl Parser<LexerToken, Spanned<LiteralExpr>, Error = Simple<LexerToken>> + Clone {
-    // TODO: this does not need to be recursive
-    recursive(|expr| {
-        //
-        let literal_expr = expr
-            .to(LiteralExpr::Nil)
-            .map_with_span(|expr, span| (expr, span));
-        literal_expr
-    })
+/*
+fn lexer_to_literal_expr(input: &str) -> impl Parser<char, Spanned<LiteralExpr>, Error=Simple<char>>  {
+    let (tokens, errors) = lexer().parse_recovery(input);
+    let exprs: Vec<Spanned<LiteralExpr>> = match tokens {
+        Some(token_spans) => {
+            token_spans.into_iter().map(|(t, s)| {
+                let expr = match t {
+                    LexerToken::String(s) => LiteralExpr::Str(s),
+                    LexerToken::Long(_) => todo!(),
+                    LexerToken::Nil => LiteralExpr::Nil,
+                    LexerToken::Boolean(x) => LiteralExpr::Bool(x),
+                    LexerToken::Symbol(s) => LiteralExpr::Symbol(s.to_string()),
+                    LexerToken::NsSymbol(ns, s) => LiteralExpr::Symbol(format!("{}/{}", ns.to_string(), s.to_string()))
+                };
+                Spanned::new(expr, s)
+            })
+                .collect()
+        }
+        None => vec![]
+    };
+
+    let parse_errors = vec![];
+    let semantic_tokens = vec![];
+    let ast = None;
+    ParserResult { ast, parse_errors, semantic_tokens, }
 }
+ */
 
 // TODO: change to Expr
 fn expr_parser() -> impl Parser<LiteralExpr, Spanned<Expr>, Error = Simple<LiteralExpr>> + Clone {
