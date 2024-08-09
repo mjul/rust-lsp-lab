@@ -675,97 +675,38 @@ mod tests {
             assert_eq!(2, span.end);
         }
 
-        #[test]
-        fn lexer_can_parse_nil() {
-            let (t, _span) = lex_single("nil");
-            assert_eq!(LexerToken::Nil, t);
+        macro_rules! can_parse {
+            ($tc_name:ident, $input:literal, $expected:expr) => {
+                #[test]
+                fn $tc_name() {
+                    let (t, _span) = lex_single($input);
+                    assert_eq!($expected, t);
+                }
+            };
         }
 
-        #[test]
-        fn lexer_can_parse_boolean_true() {
-            let (t, _span) = lex_single("true");
-            assert_eq!(LexerToken::Boolean(true), t);
-        }
-        #[test]
-        fn lexer_can_parse_boolean_false() {
-            let (t, _span) = lex_single("false");
-            assert_eq!(LexerToken::Boolean(false), t);
-        }
+        can_parse!(nil, "nil", LexerToken::Nil);
+        can_parse!(boolean_true, "true", LexerToken::Boolean(true));
+        can_parse!(boolean_false, "false", LexerToken::Boolean(false));
+        can_parse!(string,"\"foo\"", LexerToken::String(String::from("foo")));
 
-        #[test]
-        fn lexer_can_parse_string() {
-            let (t, _span) = lex_single("\"foo\"");
-            assert_eq!(LexerToken::String(String::from("foo")), t);
-        }
+        can_parse!(symbol_dot, ".", LexerToken::Symbol(SymbolToken::Dot));
+        can_parse!(symbol_slash, "/", LexerToken::Symbol(SymbolToken::Slash));
+        can_parse!(symbol_name_simple_single_letter,"x", LexerToken::Symbol(SymbolToken::Name(String::from("x"))));
+        can_parse!(symbol_name_simple_word,"foo", LexerToken::Symbol(SymbolToken::Name(String::from("foo"))));
+        can_parse!(symbol_name_simple_word_mixed,"x123", LexerToken::Symbol(SymbolToken::Name(String::from("x123"))));
+        can_parse!(symbol_name_simple_dashed,"foo-bar", LexerToken::Symbol(SymbolToken::Name(String::from("foo-bar"))));
 
-        #[test]
-        fn lexer_can_parse_symbol_dot() {
-            let (t, _span) = lex_single(".");
-            assert_eq!(LexerToken::Symbol(SymbolToken::Dot), t);
-        }
-
-        #[test]
-        fn lexer_can_parse_symbol_slash() {
-            let (t, span) = lex_single("/");
-            assert_eq!(LexerToken::Symbol(SymbolToken::Slash), t);
-        }
-
-        #[test]
-        fn lexer_can_parse_symbol_name_simple_single_letter() {
-            let (t, _span) = lex_single("x");
-            assert_eq!(LexerToken::Symbol(SymbolToken::Name(String::from("x"))), t);
-        }
-
-        #[test]
-        fn lexer_can_parse_symbol_name_simple_word() {
-            let (t, _span) = lex_single("foo");
-            assert_eq!(
-                LexerToken::Symbol(SymbolToken::Name(String::from("foo"))),
-                t
-            );
-        }
-
-        #[test]
-        fn lexer_can_parse_symbol_name_simple_word_mixed() {
-            let (t, _span) = lex_single("x123");
-            assert_eq!(
-                LexerToken::Symbol(SymbolToken::Name(String::from("x123"))),
-                t
-            );
-        }
-
-        #[test]
-        fn lexer_can_parse_symbol_name_simple_dashed() {
-            let (t, _span) = lex_single("foo-bar");
-            assert_eq!(
-                LexerToken::Symbol(SymbolToken::Name(String::from("foo-bar"))),
-                t
-            );
-        }
-
-        #[test]
-        fn lexer_can_parse_symbol_with_namespace_short() {
-            let (t, _span) = lex_single("f/foo");
-            assert_eq!(
+        can_parse!(symbol_with_namespace_short,"f/foo",
                 LexerToken::NsSymbol(
                     NameToken(String::from("f")),
                     SymbolToken::Name(String::from("foo")),
-                ),
-                t
-            );
-        }
-
-        #[test]
-        fn lexer_can_parse_symbol_with_namespace_dotted() {
-            let (t, _span) = lex_single("name.space/foo");
-            assert_eq!(
+                ));
+        can_parse!(symbol_with_namespace_dotted,"name.space/foo",
                 LexerToken::NsSymbol(
                     NameToken(String::from("name.space")),
                     SymbolToken::Name(String::from("foo")),
-                ),
-                t
-            );
-        }
+                ));
 
         #[test]
         fn lexer_can_parse_multiple_tokens_two_true_nil() {
