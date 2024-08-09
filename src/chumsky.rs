@@ -59,11 +59,13 @@ pub enum LexerToken {
     Boolean(bool),
     Symbol(SymbolToken),
     NsSymbol(NameToken, SymbolToken),
+    Character(char),
 }
 
 impl Display for LexerToken {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            LexerToken::Character(c) => write!(f, "'{}'", c),
             LexerToken::String(s) => write!(f, "\"{}\"", s),
             LexerToken::Long(n) => write!(f, "{}", n),
             LexerToken::Nil => write!(f, "nil"),
@@ -165,13 +167,10 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
     let number = long_number;
 
     // A parser for characters (simplified)
-    /*
-    let char_ = just('\'')
-        .ignore_then(filter(|c| *c != '\''))
+    let char_ = just::<_, _, Simple<char>>('\'')
+        .ignore_then(none_of("'"))
         .then_ignore(just('\''))
-        .collect::<String>()
-        .map(|s| Literal::Character('x'));
-    */
+        .map(|c| LexerToken::Character(c));
 
     // TODO: use whitespace lexer for last part:
     let symbol_head = none_of::<_, _, Simple<char>>("0123456789^`\\\"#~@:/%()[]{} \n\r\t");
@@ -252,7 +251,7 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
     let nil = text::keyword::<_, _, Simple<char>>("nil").map(|_| LexerToken::Nil);
 
     // A single token can be one of the above
-    let token = choice((str_, boolean, nil, number, ns_symbol, symbol))
+    let token = choice((char_, str_, boolean, nil, number, ns_symbol, symbol))
         .recover_with(skip_then_retry_until([]));
 
     token
@@ -602,7 +601,9 @@ pub struct ParserResult {
     pub semantic_tokens: Vec<ImCompleteSemanticToken>,
 }
 
+/// Parse an input to a `ParseResult`
 pub fn parse(src: &str) -> ParserResult {
+    // First, the lexing
     let (tokens, errs) = lexer().parse_recovery(src);
 
     let (ast, tokenize_errors, semantic_tokens) = if let Some(tokens) = tokens {
@@ -618,7 +619,7 @@ pub fn parse(src: &str) -> ParserResult {
                         .position(|item| item == &SemanticTokenType::KEYWORD)
                         .unwrap(),
                 }),
-                LexerToken::String(_) => Some(ImCompleteSemanticToken {
+                LexerToken::Character(_) | LexerToken::String(_) => Some(ImCompleteSemanticToken {
                     start: span.start,
                     length: span.len(),
                     token_type: LEGEND_TYPE
@@ -634,17 +635,20 @@ pub fn parse(src: &str) -> ParserResult {
                         .position(|item| item == &SemanticTokenType::NUMBER)
                         .unwrap(),
                 }),
-                LexerToken::Symbol(_) | LexerToken::NsSymbol(_, _) => Some(ImCompleteSemanticToken {
-                    start: span.start,
-                    length: span.len(),
-                    token_type: LEGEND_TYPE
-                        .iter()
-                        .position(|item| item == &SemanticTokenType::VARIABLE)
-                        .unwrap(),
-                })
+                LexerToken::Symbol(_) | LexerToken::NsSymbol(_, _) => {
+                    Some(ImCompleteSemanticToken {
+                        start: span.start,
+                        length: span.len(),
+                        token_type: LEGEND_TYPE
+                            .iter()
+                            .position(|item| item == &SemanticTokenType::VARIABLE)
+                            .unwrap(),
+                    })
+                }
             })
             .collect::<Vec<_>>();
         let len = src.chars().count();
+        // Now parse the lexemes (tokens) into an AST
         let (ast, parse_errs) =
             funcs_parser().parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter()));
 
@@ -708,25 +712,49 @@ mod tests {
         can_parse!(nil, "nil", LexerToken::Nil);
         can_parse!(boolean_true, "true", LexerToken::Boolean(true));
         can_parse!(boolean_false, "false", LexerToken::Boolean(false));
-        can_parse!(string,"\"foo\"", LexerToken::String(String::from("foo")));
+        can_parse!(char_simple, "'x'", LexerToken::Character('x'));
+
+        can_parse!(string, "\"foo\"", LexerToken::String(String::from("foo")));
 
         can_parse!(symbol_dot, ".", LexerToken::Symbol(SymbolToken::Dot));
         can_parse!(symbol_slash, "/", LexerToken::Symbol(SymbolToken::Slash));
-        can_parse!(symbol_name_simple_single_letter,"x", LexerToken::Symbol(SymbolToken::Name(String::from("x"))));
-        can_parse!(symbol_name_simple_word,"foo", LexerToken::Symbol(SymbolToken::Name(String::from("foo"))));
-        can_parse!(symbol_name_simple_word_mixed,"x123", LexerToken::Symbol(SymbolToken::Name(String::from("x123"))));
-        can_parse!(symbol_name_simple_dashed,"foo-bar", LexerToken::Symbol(SymbolToken::Name(String::from("foo-bar"))));
+        can_parse!(
+            symbol_name_simple_single_letter,
+            "x",
+            LexerToken::Symbol(SymbolToken::Name(String::from("x")))
+        );
+        can_parse!(
+            symbol_name_simple_word,
+            "foo",
+            LexerToken::Symbol(SymbolToken::Name(String::from("foo")))
+        );
+        can_parse!(
+            symbol_name_simple_word_mixed,
+            "x123",
+            LexerToken::Symbol(SymbolToken::Name(String::from("x123")))
+        );
+        can_parse!(
+            symbol_name_simple_dashed,
+            "foo-bar",
+            LexerToken::Symbol(SymbolToken::Name(String::from("foo-bar")))
+        );
 
-        can_parse!(symbol_with_namespace_short,"f/foo",
-                LexerToken::NsSymbol(
-                    NameToken(String::from("f")),
-                    SymbolToken::Name(String::from("foo")),
-                ));
-        can_parse!(symbol_with_namespace_dotted,"name.space/foo",
-                LexerToken::NsSymbol(
-                    NameToken(String::from("name.space")),
-                    SymbolToken::Name(String::from("foo")),
-                ));
+        can_parse!(
+            symbol_with_namespace_short,
+            "f/foo",
+            LexerToken::NsSymbol(
+                NameToken(String::from("f")),
+                SymbolToken::Name(String::from("foo")),
+            )
+        );
+        can_parse!(
+            symbol_with_namespace_dotted,
+            "name.space/foo",
+            LexerToken::NsSymbol(
+                NameToken(String::from("name.space")),
+                SymbolToken::Name(String::from("foo")),
+            )
+        );
 
         #[test]
         fn lexer_can_parse_multiple_tokens_two_true_nil() {
