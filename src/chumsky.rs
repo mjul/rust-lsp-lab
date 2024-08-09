@@ -412,7 +412,23 @@ fn lexer_to_literal_expr(input: &str) -> impl Parser<char, Spanned<LiteralExpr>,
     let ast = None;
     ParserResult { ast, parse_errors, semantic_tokens, }
 }
- */
+*/
+
+fn literal_expr_parser() -> impl Parser<LexerToken, Spanned<LiteralExpr>, Error = Simple<LexerToken>>
+{
+    any::<LexerToken, _>().map_with_span(|t, span| match t {
+        LexerToken::Nil => Spanned::new(LiteralExpr::Nil, span),
+        LexerToken::Character(c) => Spanned::new(LiteralExpr::Character(c), span),
+        LexerToken::String(s) => Spanned::new(LiteralExpr::Str(s), span),
+        LexerToken::Long(n) => Spanned::new(LiteralExpr::Number(format!("{}", n)), span),
+        LexerToken::Boolean(b) => Spanned::new(LiteralExpr::Bool(b), span),
+        LexerToken::Symbol(s) => Spanned::new(LiteralExpr::Symbol(s.to_string()), span),
+        LexerToken::NsSymbol(n, s) => Spanned::new(
+            LiteralExpr::Symbol(format!("{}/{}", n.to_string(), s.to_string())),
+            span,
+        ),
+    })
+}
 
 // TODO: change to Expr
 fn expr_parser() -> impl Parser<LiteralExpr, Spanned<Expr>, Error = Simple<LiteralExpr>> + Clone {
@@ -829,5 +845,60 @@ mod tests {
                 _ => assert!(false),
             }
         }
+    }
+    mod literal_expr_parsing {
+        use super::*;
+
+        macro_rules! can_parse {
+            ($tc_name:ident, $input:expr, $expected:expr) => {
+                #[test]
+                fn $tc_name() {
+                    let (t, errors) = literal_expr_parser().parse_recovery($input);
+                    assert!(t.is_some());
+                    let (expr, span) = t.unwrap();
+                    assert_eq!($expected, expr);
+                }
+            };
+        }
+
+        can_parse!(nil, [LexerToken::Nil], LiteralExpr::Nil);
+        can_parse!(
+            boolean_true,
+            [LexerToken::Boolean(true)],
+            LiteralExpr::Bool(true)
+        );
+        can_parse!(
+            boolean_false,
+            [LexerToken::Boolean(false)],
+            LiteralExpr::Bool(false)
+        );
+        can_parse!(
+            long,
+            [LexerToken::Long(42)],
+            LiteralExpr::Number(String::from("42"))
+        );
+        can_parse!(
+            char_simple,
+            [LexerToken::Character('x')],
+            LiteralExpr::Character('x')
+        );
+        can_parse!(
+            string_simple,
+            [LexerToken::String(String::from("foo"))],
+            LiteralExpr::Str(String::from("foo"))
+        );
+        can_parse!(
+            symbol_simple,
+            [LexerToken::Symbol(SymbolToken::Name(String::from("foo")))],
+            LiteralExpr::Symbol(String::from("foo"))
+        );
+        can_parse!(
+            symbol_with_ns,
+            [LexerToken::NsSymbol(
+                NameToken(String::from("a.b")),
+                SymbolToken::Name(String::from("foo"))
+            )],
+            LiteralExpr::Symbol(String::from("a.b/foo"))
+        );
     }
 }
