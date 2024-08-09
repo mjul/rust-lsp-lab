@@ -634,12 +634,14 @@ pub fn parse(src: &str) -> ParserResult {
                         .position(|item| item == &SemanticTokenType::NUMBER)
                         .unwrap(),
                 }),
-                LexerToken::Symbol(_) => {
-                    todo!()
-                }
-                LexerToken::NsSymbol(_, _) => {
-                    todo!()
-                }
+                LexerToken::Symbol(_) | LexerToken::NsSymbol(_, _) => Some(ImCompleteSemanticToken {
+                    start: span.start,
+                    length: span.len(),
+                    token_type: LEGEND_TYPE
+                        .iter()
+                        .position(|item| item == &SemanticTokenType::VARIABLE)
+                        .unwrap(),
+                })
             })
             .collect::<Vec<_>>();
         let len = src.chars().count();
