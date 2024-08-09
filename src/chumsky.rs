@@ -180,7 +180,6 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
         just::<_, _, Simple<char>>('.'),
     ));
 
-    /// A parser that accepts a NAME fragment
     let name = symbol_head
         .then(symbol_rest.clone().repeated())
         .then(
@@ -201,7 +200,8 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
                 }
             }
             NameToken(s)
-        });
+        })
+        .labelled("NAME fragment");
 
     let symbol_token = choice::<_, Simple<char>>((
         just::<_, _, Simple<char>>('.').to(SymbolToken::Dot),
