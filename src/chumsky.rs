@@ -302,6 +302,12 @@ pub enum BinaryOp {
 pub type Spanned<T> = (T, Span);
 
 #[derive(Debug)]
+pub enum FileExpr {
+    Error,
+    Forms(Vec<FormExpr>)
+}
+
+#[derive(Debug)]
 pub enum FormExpr {
     Literal(LiteralExpr),
     List(ListExpr),
@@ -309,6 +315,11 @@ pub enum FormExpr {
     Map(MapExpr),
     // No reader macros
     // ReaderMacro(ReaderMacroExpr)
+}
+
+#[derive(Debug)]
+pub enum FormsExpr {
+    Forms(Vec<FormExpr>)
 }
 
 #[derive(Debug)]
@@ -320,6 +331,8 @@ pub enum VectorExpr {}
 #[derive(Debug)]
 pub enum MapExpr {}
 
+
+// TODO: remove this (legacy)
 // An expression node in the AST. Children are spanned so we can generate useful runtime errors.
 #[derive(Debug)]
 pub enum Expr {
@@ -362,6 +375,7 @@ impl Expr {
     }
 }
 
+// TODO: remove this (legacy)
 // A function node in the AST.
 #[derive(Debug)]
 pub struct Func {
