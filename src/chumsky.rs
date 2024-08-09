@@ -385,6 +385,18 @@ pub struct Func {
     pub span: Span,
 }
 
+
+/// Parse tokens into a LiteralExpr AST node
+fn literal_expr_parser() ->impl Parser<LexerToken, Spanned<LiteralExpr>, Error = Simple<LexerToken>> + Clone {
+    // TODO: this does not need to be recursive
+    recursive(|expr| {
+        //
+        let literal_expr = expr.to(LiteralExpr::Nil)
+            .map_with_span(|expr, span| (expr, span));
+        literal_expr
+    })
+}
+
 // TODO: change to Expr
 fn expr_parser() -> impl Parser<LiteralExpr, Spanned<Expr>, Error = Simple<LiteralExpr>> + Clone {
     recursive(|expr| {
