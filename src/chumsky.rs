@@ -175,6 +175,7 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error=Simple<char>> {
             one_of::<_, _, Simple<char>>("0123456789"),
             just::<_, _, Simple<char>>('.')));
 
+    /// A parser that accepts a NAME fragment
     let name =
         symbol_head
             .then(symbol_rest.clone().repeated())
@@ -193,29 +194,25 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error=Simple<char>> {
             }
             );
 
-    /*
-    let symbol =
-        name
-            .map(|NameToken(nt)| LexerToken::Symbol(SymbolToken::Name(nt)));
-            */
-
     let symbol_token =
         choice::<_, Simple<char>>((
             just::<_, _, Simple<char>>('.').to(SymbolToken::Dot),
             just::<_, _, Simple<char>>('/').to(SymbolToken::Slash),
-            name.map(|NameToken(s)| SymbolToken::Name(s)),
+            name.clone().map(|NameToken(s)| SymbolToken::Name(s)),
         ));
 
-    let symbol = symbol_token
+    let symbol =
+        symbol_token.clone()
         .map(|st| LexerToken::Symbol(st));
 
-    /*
     let ns_symbol =
         name
             .then(just('/'))
-            .then(symbol)
-            .map(|a, b| LexerToken::NsSymbol(a, b));
-*/
+            .then(symbol_token)
+            .map(|((n,slash), symbol)| {
+                LexerToken::NsSymbol(n, symbol)
+            });
+
     /*
         let simple_keyword_ = just(':')
             .ignore_then(symbol_)
@@ -256,7 +253,8 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error=Simple<char>> {
             boolean,
             nil,
             number,
-            symbol))
+            ns_symbol,
+            symbol,))
             .recover_with(skip_then_retry_until([]));
 
     token
