@@ -193,16 +193,21 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error=Simple<char>> {
             }
             );
 
+    /*
     let symbol =
         name
             .map(|NameToken(nt)| LexerToken::Symbol(SymbolToken::Name(nt)));
-    /*
-        choice((
-            just("."),
-            //just("/"),
-            name.map(|NameToken(s)| s)))
-            .map(SymbolToken);
             */
+
+    let symbol_token =
+        choice::<_, Simple<char>>((
+            just::<_, _, Simple<char>>('.').to(SymbolToken::Dot),
+            just::<_, _, Simple<char>>('/').to(SymbolToken::Slash),
+            name.map(|NameToken(s)| SymbolToken::Name(s)),
+        ));
+
+    let symbol = symbol_token
+        .map(|st| LexerToken::Symbol(st));
 
     /*
     let ns_symbol =
@@ -694,13 +699,25 @@ mod tests {
     }
 
     #[test]
-    fn lexer_can_parse_symbol_name_dashed() {
+    fn lexer_can_parse_symbol_name_simple_word_mixed() {
+        let (t, _span) = lex_single("x123");
+        assert_eq!(LexerToken::Symbol(SymbolToken::Name(String::from("x123"))), t);
+    }
+
+    #[test]
+    fn lexer_can_parse_symbol_name_simple_dashed() {
         let (t, _span) = lex_single("foo-bar");
         assert_eq!(LexerToken::Symbol(SymbolToken::Name(String::from("foo-bar"))), t);
     }
 
     #[test]
-    fn lexer_can_parse_symbol_with_namespace() {
+    fn lexer_can_parse_symbol_with_namespace_short() {
+        let (t, _span) = lex_single("f/foo");
+        assert_eq!(LexerToken::NsSymbol(NameToken(String::from("f")), SymbolToken::Name(String::from("foo"))), t);
+    }
+
+    #[test]
+    fn lexer_can_parse_symbol_with_namespace_dotted() {
         let (t, _span) = lex_single("name.space/foo");
         assert_eq!(LexerToken::NsSymbol(NameToken(String::from("name.space")), SymbolToken::Name(String::from("foo"))), t);
     }
