@@ -2,8 +2,8 @@ use core::fmt;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
-use chumsky::{prelude::*, stream::Stream};
 use chumsky::Parser;
+use chumsky::{prelude::*, stream::Stream};
 use serde::{Deserialize, Serialize};
 use tower_lsp::lsp_types::SemanticTokenType;
 
@@ -47,7 +47,6 @@ impl std::fmt::Display for SymbolToken {
     }
 }
 
-
 // Note this is a simplified lexer
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum LexerToken {
@@ -65,12 +64,16 @@ impl Display for LexerToken {
             LexerToken::String(s) => write!(f, "\"{}\"", s),
             LexerToken::Long(n) => write!(f, "{}", n),
             LexerToken::Nil => write!(f, "nil"),
-            LexerToken::Boolean(b) => write!(f, "{}", match b {
-                true => "true",
-                false => "false"
-            }),
+            LexerToken::Boolean(b) => write!(
+                f,
+                "{}",
+                match b {
+                    true => "true",
+                    false => "false",
+                }
+            ),
             LexerToken::Symbol(s) => write!(f, "{}", s),
-            LexerToken::NsSymbol(n, s) => write!(f, "{}/{}", n, s)
+            LexerToken::NsSymbol(n, s) => write!(f, "{}/{}", n, s),
         }
     }
 }
@@ -131,10 +134,11 @@ impl fmt::Display for LiteralExpr {
     }
 }
 
-
-fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error=Simple<char>> {
+fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
     // A parser for comments
-    let comment = just(";").then(take_until(text::newline::<Simple<char>>())).padded();
+    let comment = just(";")
+        .then(take_until(text::newline::<Simple<char>>()))
+        .padded();
 
     // A parser for simple strings
     let str_ = just::<_, _, Simple<char>>('"')
@@ -145,8 +149,7 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error=Simple<char>> {
 
     // A parser for longs
     let long_number =
-        text::int::<_, Simple<char>>(10)
-            .map(|s| LexerToken::Long(s.parse().unwrap()));
+        text::int::<_, Simple<char>>(10).map(|s| LexerToken::Long(s.parse().unwrap()));
     // TODO: negative numbers
     // TODO: floats
     // TODO: floats, other bases
@@ -169,93 +172,85 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error=Simple<char>> {
 
     // TODO: use whitespace lexer for last part:
     let symbol_head = none_of::<_, _, Simple<char>>("0123456789^`\\\"#~@:/%()[]{} \n\r\t");
-    let symbol_rest =
-        choice::<_, Simple<char>>((
-            symbol_head.clone(),
-            one_of::<_, _, Simple<char>>("0123456789"),
-            just::<_, _, Simple<char>>('.')));
+    let symbol_rest = choice::<_, Simple<char>>((
+        symbol_head.clone(),
+        one_of::<_, _, Simple<char>>("0123456789"),
+        just::<_, _, Simple<char>>('.'),
+    ));
 
     /// A parser that accepts a NAME fragment
-    let name =
-        symbol_head
-            .then(symbol_rest.clone().repeated())
-            .then(just::<_, _, Simple<char>>(':')
+    let name = symbol_head
+        .then(symbol_rest.clone().repeated())
+        .then(
+            just::<_, _, Simple<char>>(':')
                 .then(symbol_rest.repeated().at_least(1))
-                .repeated())
-            .map(|((sh, srs), colon_rests)| {
-                let mut s = String::new();
-                s.push(sh);
-                for x in srs { s.push(x); }
-                for (colon, symbol_rests) in colon_rests {
-                    s.push(colon);
-                    for x in symbol_rests { s.push(x); }
-                }
-                NameToken(s)
+                .repeated(),
+        )
+        .map(|((sh, srs), colon_rests)| {
+            let mut s = String::new();
+            s.push(sh);
+            for x in srs {
+                s.push(x);
             }
-            );
+            for (colon, symbol_rests) in colon_rests {
+                s.push(colon);
+                for x in symbol_rests {
+                    s.push(x);
+                }
+            }
+            NameToken(s)
+        });
 
-    let symbol_token =
-        choice::<_, Simple<char>>((
-            just::<_, _, Simple<char>>('.').to(SymbolToken::Dot),
-            just::<_, _, Simple<char>>('/').to(SymbolToken::Slash),
-            name.clone().map(|NameToken(s)| SymbolToken::Name(s)),
-        ));
+    let symbol_token = choice::<_, Simple<char>>((
+        just::<_, _, Simple<char>>('.').to(SymbolToken::Dot),
+        just::<_, _, Simple<char>>('/').to(SymbolToken::Slash),
+        name.clone().map(|NameToken(s)| SymbolToken::Name(s)),
+    ));
 
-    let symbol =
-        symbol_token.clone()
-        .map(|st| LexerToken::Symbol(st));
+    let symbol = symbol_token.clone().map(|st| LexerToken::Symbol(st));
 
-    let ns_symbol =
-        name
-            .then(just('/'))
-            .then(symbol_token)
-            .map(|((n,slash), symbol)| {
-                LexerToken::NsSymbol(n, symbol)
-            });
+    let ns_symbol = name
+        .then(just('/'))
+        .then(symbol_token)
+        .map(|((n, slash), symbol)| LexerToken::NsSymbol(n, symbol));
 
     /*
-        let simple_keyword_ = just(':')
-            .ignore_then(symbol_)
-            .collect::<String>()
-            .map(KeywordLiteral::SimpleKeyword);
+            let simple_keyword_ = just(':')
+                .ignore_then(symbol_)
+                .collect::<String>()
+                .map(KeywordLiteral::SimpleKeyword);
 
-        let ns_keyword_ = just(':')
-            .ignore_then(symbol_)
-            .then(just('/'))
-            .ignore_then(symbol_)
-            .collect::<String>()
-            .map(_ => KeywordLiteral::MacroKeyword("x", ))
-*/
+            let ns_keyword_ = just(':')
+                .ignore_then(symbol_)
+                .then(just('/'))
+                .ignore_then(symbol_)
+                .collect::<String>()
+                .map(_ => KeywordLiteral::MacroKeyword("x", ))
+    */
 
     // A parser for keywords
     /*
-    let keyword_ = just(':')
-        .then(just(':'))
-        .ignore_then(filter(|c| *c != '"').repeated())
-        .then_ignore(just('"'))
-        .collect::<String>()
-        .map(Literal::Number);
-*/
+        let keyword_ = just(':')
+            .then(just(':'))
+            .ignore_then(filter(|c| *c != '"').repeated())
+            .then_ignore(just('"'))
+            .collect::<String>()
+            .map(Literal::Number);
+    */
 
     // A parser for control characters (delimiters, semicolons, etc.)
     //let ctrl = one_of("()[]{};,").map(Literal::Ctrl);
 
-    let boolean_true = text::keyword::<_, _, Simple<char>>("true").map(|_| LexerToken::Boolean(true));
+    let boolean_true =
+        text::keyword::<_, _, Simple<char>>("true").map(|_| LexerToken::Boolean(true));
     let boolean_false = text::keyword("false").map(|_| LexerToken::Boolean(false));
     let boolean = boolean_true.or(boolean_false);
 
     let nil = text::keyword::<_, _, Simple<char>>("nil").map(|_| LexerToken::Nil);
 
     // A single token can be one of the above
-    let token =
-        choice((
-            str_,
-            boolean,
-            nil,
-            number,
-            ns_symbol,
-            symbol,))
-            .recover_with(skip_then_retry_until([]));
+    let token = choice((str_, boolean, nil, number, ns_symbol, symbol))
+        .recover_with(skip_then_retry_until([]));
 
     token
         .padded_by(comment.repeated())
@@ -315,7 +310,6 @@ pub enum FormExpr {
     // No reader macros
     // ReaderMacro(ReaderMacroExpr)
 }
-
 
 #[derive(Debug)]
 pub enum ListExpr {}
@@ -378,7 +372,7 @@ pub struct Func {
 }
 
 // TODO: change to Expr
-fn expr_parser() -> impl Parser<LiteralExpr, Spanned<Expr>, Error=Simple<LiteralExpr>> + Clone {
+fn expr_parser() -> impl Parser<LiteralExpr, Spanned<Expr>, Error = Simple<LiteralExpr>> + Clone {
     recursive(|expr| {
         let raw_expr = recursive(|raw_expr| {
             let val = filter_map(|span, tok| match tok {
@@ -388,7 +382,7 @@ fn expr_parser() -> impl Parser<LiteralExpr, Spanned<Expr>, Error=Simple<Literal
                 LiteralExpr::Str(s) => Ok(Expr::Value(Value::Str(s))),
                 _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
             })
-                .labelled("literal");
+            .labelled("literal");
 
             /*
             let symbol = filter_map(|span, tok| match tok {
@@ -400,61 +394,60 @@ fn expr_parser() -> impl Parser<LiteralExpr, Spanned<Expr>, Error=Simple<Literal
 
             /*
 
-            // A list of expressions
-            let items = expr
-                .clone()
-                .chain(just(Literal::Ctrl(',')).ignore_then(expr.clone()).repeated())
-                .then_ignore(just(Literal::Ctrl(',')).or_not())
-                .or_not()
-                .map(|item| item.unwrap_or_default());
+                        // A list of expressions
+                        let items = expr
+                            .clone()
+                            .chain(just(Literal::Ctrl(',')).ignore_then(expr.clone()).repeated())
+                            .then_ignore(just(Literal::Ctrl(',')).or_not())
+                            .or_not()
+                            .map(|item| item.unwrap_or_default());
 
-            let list = items
-                .clone()
-                .delimited_by(just(Literal::Ctrl('[')), just(Literal::Ctrl(']')))
-                .map(Expr::List);
+                        let list = items
+                            .clone()
+                            .delimited_by(just(Literal::Ctrl('[')), just(Literal::Ctrl(']')))
+                            .map(Expr::List);
 
-            // 'Atoms' are expressions that contain no ambiguity
-            let atom = val
-                .or(ident.map(Expr::Local))
-                .or(let_)
-                .or(list)
-                // In Nano Rust, `print` is just a keyword, just like Python 2, for simplicity
-                .or(just(Literal::Print)
-                    .ignore_then(
-                        expr.clone()
-                            .delimited_by(just(Literal::Ctrl('(')), just(Literal::Ctrl(')'))),
-                    )
-                    .map(|expr| Expr::Print(Box::new(expr))))
-                .map_with_span(|expr, span| (expr, span))
-                // Atoms can also just be normal expressions, but surrounded with parentheses
-                .or(expr
-                    .clone()
-                    .delimited_by(just(Literal::Ctrl('(')), just(Literal::Ctrl(')'))))
-                // Attempt to recover anything that looks like a parenthesised expression but contains errors
-                .recover_with(nested_delimiters(
-                    Literal::Ctrl('('),
-                    Literal::Ctrl(')'),
-                    [
-                        (Literal::Ctrl('['), Literal::Ctrl(']')),
-                        (Literal::Ctrl('{'), Literal::Ctrl('}')),
-                    ],
-                    |span| (Expr::Error, span),
-                ))
-                // Attempt to recover anything that looks like a list but contains errors
-                .recover_with(nested_delimiters(
-                    Literal::Ctrl('['),
-                    Literal::Ctrl(']'),
-                    [
-                        (Literal::Ctrl('('), Literal::Ctrl(')')),
-                        (Literal::Ctrl('{'), Literal::Ctrl('}')),
-                    ],
-                    |span| (Expr::Error, span),
-                ));
-*/
+                        // 'Atoms' are expressions that contain no ambiguity
+                        let atom = val
+                            .or(ident.map(Expr::Local))
+                            .or(let_)
+                            .or(list)
+                            // In Nano Rust, `print` is just a keyword, just like Python 2, for simplicity
+                            .or(just(Literal::Print)
+                                .ignore_then(
+                                    expr.clone()
+                                        .delimited_by(just(Literal::Ctrl('(')), just(Literal::Ctrl(')'))),
+                                )
+                                .map(|expr| Expr::Print(Box::new(expr))))
+                            .map_with_span(|expr, span| (expr, span))
+                            // Atoms can also just be normal expressions, but surrounded with parentheses
+                            .or(expr
+                                .clone()
+                                .delimited_by(just(Literal::Ctrl('(')), just(Literal::Ctrl(')'))))
+                            // Attempt to recover anything that looks like a parenthesised expression but contains errors
+                            .recover_with(nested_delimiters(
+                                Literal::Ctrl('('),
+                                Literal::Ctrl(')'),
+                                [
+                                    (Literal::Ctrl('['), Literal::Ctrl(']')),
+                                    (Literal::Ctrl('{'), Literal::Ctrl('}')),
+                                ],
+                                |span| (Expr::Error, span),
+                            ))
+                            // Attempt to recover anything that looks like a list but contains errors
+                            .recover_with(nested_delimiters(
+                                Literal::Ctrl('['),
+                                Literal::Ctrl(']'),
+                                [
+                                    (Literal::Ctrl('('), Literal::Ctrl(')')),
+                                    (Literal::Ctrl('{'), Literal::Ctrl('}')),
+                                ],
+                                |span| (Expr::Error, span),
+                            ));
+            */
 
             val.clone().map_with_span(|expr, span| (expr, span))
         });
-
 
         raw_expr
 
@@ -477,7 +470,8 @@ fn expr_parser() -> impl Parser<LiteralExpr, Spanned<Expr>, Error=Simple<Literal
     })
 }
 
-pub fn funcs_parser() -> impl Parser<LexerToken, HashMap<String, Func>, Error=Simple<LexerToken>> + Clone {
+pub fn funcs_parser(
+) -> impl Parser<LexerToken, HashMap<String, Func>, Error = Simple<LexerToken>> + Clone {
     let ident = filter_map(|span, tok| match tok {
         //Literal::Ident(ident) => Ok(ident),
         _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
@@ -487,13 +481,13 @@ pub fn funcs_parser() -> impl Parser<LexerToken, HashMap<String, Func>, Error=Si
 
     // Argument lists are just identifiers separated by commas, surrounded by parentheses
     /*
-    let args = ident
-        .map_with_span(|name, span| (name, span))
-        .separated_by(just(Literal::Ctrl(',')))
-        .allow_trailing()
-        .delimited_by(just(Literal::Ctrl('(')), just(Literal::Ctrl(')')))
-        .labelled("function args");
-*/
+        let args = ident
+            .map_with_span(|name, span| (name, span))
+            .separated_by(just(Literal::Ctrl(',')))
+            .allow_trailing()
+            .delimited_by(just(Literal::Ctrl('(')), just(Literal::Ctrl(')')))
+            .labelled("function args");
+    */
     /*
     let func = just(Literal::Fn)
         .ignore_then(
@@ -596,8 +590,12 @@ pub fn parse(src: &str) -> ParserResult {
                         .position(|item| item == &SemanticTokenType::NUMBER)
                         .unwrap(),
                 }),
-                LexerToken::Symbol(_) => { todo!() }
-                LexerToken::NsSymbol(_, _) => { todo!() }
+                LexerToken::Symbol(_) => {
+                    todo!()
+                }
+                LexerToken::NsSymbol(_, _) => {
+                    todo!()
+                }
             })
             .collect::<Vec<_>>();
         let len = src.chars().count();
@@ -625,7 +623,6 @@ pub fn parse(src: &str) -> ParserResult {
         semantic_tokens,
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -693,31 +690,52 @@ mod tests {
     #[test]
     fn lexer_can_parse_symbol_name_simple_word() {
         let (t, _span) = lex_single("foo");
-        assert_eq!(LexerToken::Symbol(SymbolToken::Name(String::from("foo"))), t);
+        assert_eq!(
+            LexerToken::Symbol(SymbolToken::Name(String::from("foo"))),
+            t
+        );
     }
 
     #[test]
     fn lexer_can_parse_symbol_name_simple_word_mixed() {
         let (t, _span) = lex_single("x123");
-        assert_eq!(LexerToken::Symbol(SymbolToken::Name(String::from("x123"))), t);
+        assert_eq!(
+            LexerToken::Symbol(SymbolToken::Name(String::from("x123"))),
+            t
+        );
     }
 
     #[test]
     fn lexer_can_parse_symbol_name_simple_dashed() {
         let (t, _span) = lex_single("foo-bar");
-        assert_eq!(LexerToken::Symbol(SymbolToken::Name(String::from("foo-bar"))), t);
+        assert_eq!(
+            LexerToken::Symbol(SymbolToken::Name(String::from("foo-bar"))),
+            t
+        );
     }
 
     #[test]
     fn lexer_can_parse_symbol_with_namespace_short() {
         let (t, _span) = lex_single("f/foo");
-        assert_eq!(LexerToken::NsSymbol(NameToken(String::from("f")), SymbolToken::Name(String::from("foo"))), t);
+        assert_eq!(
+            LexerToken::NsSymbol(
+                NameToken(String::from("f")),
+                SymbolToken::Name(String::from("foo"))
+            ),
+            t
+        );
     }
 
     #[test]
     fn lexer_can_parse_symbol_with_namespace_dotted() {
         let (t, _span) = lex_single("name.space/foo");
-        assert_eq!(LexerToken::NsSymbol(NameToken(String::from("name.space")), SymbolToken::Name(String::from("foo"))), t);
+        assert_eq!(
+            LexerToken::NsSymbol(
+                NameToken(String::from("name.space")),
+                SymbolToken::Name(String::from("foo"))
+            ),
+            t
+        );
     }
 
     #[test]
@@ -731,7 +749,7 @@ mod tests {
                 assert_eq!(&LexerToken::Boolean(true), t1);
                 assert_eq!(&LexerToken::Nil, t2);
             }
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
     #[test]
@@ -745,13 +763,14 @@ mod tests {
                 assert_eq!(&LexerToken::Long(1), t1);
                 assert_eq!(&LexerToken::Long(2), t2);
             }
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
 
     #[test]
     fn lexer_can_parse_multiple_tokens_many() {
-        let actual = lexer().parse(r#"
+        let actual = lexer().parse(
+            r#"
             ;;comment
             nil
             true
@@ -762,24 +781,33 @@ mod tests {
             /
             foo
             foo.bar/baz
-            "#);
+            "#,
+        );
         assert_eq!(true, actual.is_ok());
         let tokens = actual.unwrap();
         assert_eq!(9, tokens.len());
         match &tokens[..] {
-            [(t1, _), (t2, _), (t3, _), (t4, _), (t5, _), (t6, _), (t7, _), (t8, _), (t9, _), ] =>
-                {
-                    assert_eq!(&LexerToken::Nil, t1);
-                    assert_eq!(&LexerToken::Boolean(true), t2);
-                    assert_eq!(&LexerToken::Boolean(false), t3);
-                    assert_eq!(&LexerToken::Long(1), t4);
-                    assert_eq!(&LexerToken::String("foo-string".to_string()), t5);
-                    assert_eq!(&LexerToken::Symbol(SymbolToken::Dot), t6);
-                    assert_eq!(&LexerToken::Symbol(SymbolToken::Slash), t7);
-                    assert_eq!(&LexerToken::Symbol(SymbolToken::Name(String::from("foo"))), t8);
-                    assert_eq!(&LexerToken::NsSymbol(NameToken(String::from("foo.bar")), SymbolToken::Name(String::from("baz"))), t9);
-                }
-            _ => assert!(false)
+            [(t1, _), (t2, _), (t3, _), (t4, _), (t5, _), (t6, _), (t7, _), (t8, _), (t9, _)] => {
+                assert_eq!(&LexerToken::Nil, t1);
+                assert_eq!(&LexerToken::Boolean(true), t2);
+                assert_eq!(&LexerToken::Boolean(false), t3);
+                assert_eq!(&LexerToken::Long(1), t4);
+                assert_eq!(&LexerToken::String("foo-string".to_string()), t5);
+                assert_eq!(&LexerToken::Symbol(SymbolToken::Dot), t6);
+                assert_eq!(&LexerToken::Symbol(SymbolToken::Slash), t7);
+                assert_eq!(
+                    &LexerToken::Symbol(SymbolToken::Name(String::from("foo"))),
+                    t8
+                );
+                assert_eq!(
+                    &LexerToken::NsSymbol(
+                        NameToken(String::from("foo.bar")),
+                        SymbolToken::Name(String::from("baz"))
+                    ),
+                    t9
+                );
+            }
+            _ => assert!(false),
         }
     }
 }
