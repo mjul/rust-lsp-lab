@@ -107,7 +107,7 @@ impl fmt::Display for KeywordLiteral {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Literal {
+pub enum LiteralExpr {
     Nil,
     Str(String),
     Number(String),
@@ -117,16 +117,16 @@ pub enum Literal {
     Symbol(String),
 }
 
-impl fmt::Display for Literal {
+impl fmt::Display for LiteralExpr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Literal::Nil => write!(f, "nil"),
-            Literal::Bool(x) => write!(f, "{}", x),
-            Literal::Number(n) => write!(f, "{}", n),
-            Literal::Str(s) => write!(f, "{}", s),
-            Literal::Character(c) => write!(f, "{}", c),
-            Literal::Keyword(kwt) => write!(f, "{}", kwt),
-            Literal::Symbol(st) => write!(f, "{}", st),
+            LiteralExpr::Nil => write!(f, "nil"),
+            LiteralExpr::Bool(x) => write!(f, "{}", x),
+            LiteralExpr::Number(n) => write!(f, "{}", n),
+            LiteralExpr::Str(s) => write!(f, "{}", s),
+            LiteralExpr::Character(c) => write!(f, "{}", c),
+            LiteralExpr::Keyword(kwt) => write!(f, "{}", kwt),
+            LiteralExpr::Symbol(st) => write!(f, "{}", st),
         }
     }
 }
@@ -313,8 +313,6 @@ pub enum FormExpr {
     // ReaderMacro(ReaderMacroExpr)
 }
 
-#[derive(Debug)]
-pub enum LiteralExpr {}
 
 #[derive(Debug)]
 pub enum ListExpr {}
@@ -376,14 +374,15 @@ pub struct Func {
     pub span: Span,
 }
 
-fn expr_parser() -> impl Parser<Literal, Spanned<Expr>, Error=Simple<Literal>> + Clone {
+// TODO: change to Expr
+fn expr_parser() -> impl Parser<LiteralExpr, Spanned<Expr>, Error=Simple<LiteralExpr>> + Clone {
     recursive(|expr| {
         let raw_expr = recursive(|raw_expr| {
             let val = filter_map(|span, tok| match tok {
-                Literal::Nil => Ok(Expr::Value(Value::Null)),
-                Literal::Bool(x) => Ok(Expr::Value(Value::Bool(x))),
-                Literal::Number(n) => Ok(Expr::Value(Value::Num(n.parse().unwrap()))),
-                Literal::Str(s) => Ok(Expr::Value(Value::Str(s))),
+                LiteralExpr::Nil => Ok(Expr::Value(Value::Null)),
+                LiteralExpr::Bool(x) => Ok(Expr::Value(Value::Bool(x))),
+                LiteralExpr::Number(n) => Ok(Expr::Value(Value::Num(n.parse().unwrap()))),
+                LiteralExpr::Str(s) => Ok(Expr::Value(Value::Str(s))),
                 _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
             })
                 .labelled("literal");
