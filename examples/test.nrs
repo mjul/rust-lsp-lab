@@ -2,6 +2,18 @@
 
 ;; A comment
 
+(def number-int 1)
+(def string-simple "foo")
+(def keyword-global :glob)
+(def keyword-ns ::kw.ns/bar)
+
+(def symbol-simple 'number-int)
+
+(def seq-123 '(1 2 3))
+(def vec-123 [1 2 3])
+(def map-flat {:a 1})
+(def map-nested {:a {:a1 1 :a2 2} :b {:b1 "b1"}})
+
 (def dict {:en {:terminology {:seasons {:winter "Winter" :spring "Spring" :summer "Summer" :autumn "Fall"}}}
            :en-US {:terminology {:seasons
                                  {:winter :en.terminology.seasons/winter
