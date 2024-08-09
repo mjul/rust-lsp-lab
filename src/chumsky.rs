@@ -1,3 +1,7 @@
+//! This is the parser and interpreter for a simplified Clojure grammar
+//! See the complete ANTLR 4 grammar here:
+//! https://github.com/antlr/grammars-v4/blob/master/clojure/Clojure.g4
+
 use core::fmt;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -9,11 +13,10 @@ use tower_lsp::lsp_types::SemanticTokenType;
 
 use crate::semantic_token::LEGEND_TYPE;
 
-/// This is the parser and interpreter for a simplified Clojure grammar
-/// See the complete ANTLR 4 grammar here:
-/// https://github.com/antlr/grammars-v4/blob/master/clojure/Clojure.g4
-
 pub type Span = std::ops::Range<usize>;
+
+/// Semantic Tokens are used by clients for syntax highlighting.
+/// See https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_semanticTokens
 #[derive(Debug)]
 pub struct ImCompleteSemanticToken {
     pub start: usize,
