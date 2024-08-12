@@ -60,6 +60,7 @@ pub enum LexerToken {
     Symbol(SymbolToken),
     NsSymbol(NameToken, SymbolToken),
     Character(char),
+    Colon,
 }
 
 impl Display for LexerToken {
@@ -79,6 +80,7 @@ impl Display for LexerToken {
             ),
             LexerToken::Symbol(s) => write!(f, "{}", s),
             LexerToken::NsSymbol(n, s) => write!(f, "{}/{}", n, s),
+            LexerToken::Colon => write!(f, ":"),
         }
     }
 }
@@ -243,6 +245,7 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
     // A parser for control characters (delimiters, semicolons, etc.)
     //let ctrl = one_of("()[]{};,").map(Literal::Ctrl);
 
+    let colon = just::<_, _, Simple<char>>(':').to(LexerToken::Colon);
     let boolean_true =
         text::keyword::<_, _, Simple<char>>("true").map(|_| LexerToken::Boolean(true));
     let boolean_false = text::keyword("false").map(|_| LexerToken::Boolean(false));
@@ -251,7 +254,7 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
     let nil = text::keyword::<_, _, Simple<char>>("nil").map(|_| LexerToken::Nil);
 
     // A single token can be one of the above
-    let token = choice((char_, str_, boolean, nil, number, ns_symbol, symbol))
+    let token = choice((colon, char_, str_, boolean, nil, number, ns_symbol, symbol))
         .recover_with(skip_then_retry_until([]));
 
     token
@@ -416,7 +419,31 @@ fn lexer_to_literal_expr(input: &str) -> impl Parser<char, Spanned<LiteralExpr>,
 
 fn literal_expr_parser() -> impl Parser<LexerToken, Spanned<LiteralExpr>, Error = Simple<LexerToken>>
 {
-    any::<LexerToken, _>().map_with_span(|t, span| match t {
+    let keyword = just(LexerToken::Colon)
+        .repeated()
+        .at_least(1)
+        .at_most(2)
+        .then(filter(|t| match t {
+            LexerToken::Symbol(_) => true,
+            _ => false,
+        }))
+        .map_with_span(|(colons, symbol), span| match symbol {
+            LexerToken::Symbol(s) => Spanned::new(
+                match colons.len() {
+                    1 => LiteralExpr::Keyword(KeywordLiteral::SimpleKeyword(
+                        SymbolLiteral::SimpleSymbol(s),
+                    )),
+                    2 => LiteralExpr::Keyword(KeywordLiteral::MacroKeyword(
+                        SymbolLiteral::SimpleSymbol(s),
+                    )),
+                    _ => unreachable!(),
+                },
+                span,
+            ),
+            _ => unreachable!(),
+        });
+
+    let simple_literal = any::<LexerToken, _>().map_with_span(|t, span| match t {
         LexerToken::Nil => Spanned::new(LiteralExpr::Nil, span),
         LexerToken::Character(c) => Spanned::new(LiteralExpr::Character(c), span),
         LexerToken::String(s) => Spanned::new(LiteralExpr::Str(s), span),
@@ -427,7 +454,10 @@ fn literal_expr_parser() -> impl Parser<LexerToken, Spanned<LiteralExpr>, Error 
             LiteralExpr::Symbol(format!("{}/{}", n.to_string(), s.to_string())),
             span,
         ),
-    })
+        LexerToken::Colon => unreachable!(),
+    });
+
+    choice((keyword, simple_literal))
 }
 
 // TODO: change to Expr
@@ -617,7 +647,7 @@ pub struct ParserResult {
     pub semantic_tokens: Vec<ImCompleteSemanticToken>,
 }
 
-/// Parse an input to a `ParseResult`
+/// Parse an input to a `ParseResult` with the semantic information for syntax highlighting
 pub fn parse(src: &str) -> ParserResult {
     // First, the lexing
     let (tokens, errs) = lexer().parse_recovery(src);
@@ -627,6 +657,7 @@ pub fn parse(src: &str) -> ParserResult {
         let semantic_tokens = tokens
             .iter()
             .filter_map(|(token, span)| match token {
+                LexerToken::Colon => None,
                 LexerToken::Nil | LexerToken::Boolean(_) => Some(ImCompleteSemanticToken {
                     start: span.start,
                     length: span.len(),
@@ -725,6 +756,7 @@ mod tests {
             };
         }
 
+        can_parse!(colon, ":", LexerToken::Colon);
         can_parse!(nil, "nil", LexerToken::Nil);
         can_parse!(boolean_true, "true", LexerToken::Boolean(true));
         can_parse!(boolean_false, "false", LexerToken::Boolean(false));
@@ -899,6 +931,27 @@ mod tests {
                 SymbolToken::Name(String::from("foo"))
             )],
             LiteralExpr::Symbol(String::from("a.b/foo"))
+        );
+        can_parse!(
+            keyword_simple,
+            [
+                LexerToken::Colon,
+                LexerToken::Symbol(SymbolToken::Name(String::from("foo")))
+            ],
+            LiteralExpr::Keyword(KeywordLiteral::SimpleKeyword(SymbolLiteral::SimpleSymbol(
+                SymbolToken::Name(String::from("foo"))
+            )))
+        );
+        can_parse!(
+            keyword_macro_keyword,
+            [
+                LexerToken::Colon,
+                LexerToken::Colon,
+                LexerToken::Symbol(SymbolToken::Name(String::from("foo")))
+            ],
+            LiteralExpr::Keyword(KeywordLiteral::MacroKeyword(SymbolLiteral::SimpleSymbol(
+                SymbolToken::Name(String::from("foo"))
+            )))
         );
     }
 }
