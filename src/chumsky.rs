@@ -61,6 +61,10 @@ pub enum LexerToken {
     NsSymbol(NameToken, SymbolToken),
     Character(char),
     Colon,
+    /// Left parenthesis, '('
+    LPar,
+    /// Right parenthesis, ')'
+    RPar,
 }
 
 impl Display for LexerToken {
@@ -81,6 +85,8 @@ impl Display for LexerToken {
             LexerToken::Symbol(s) => write!(f, "{}", s),
             LexerToken::NsSymbol(n, s) => write!(f, "{}/{}", n, s),
             LexerToken::Colon => write!(f, ":"),
+            LexerToken::LPar => write!(f, "("),
+            LexerToken::RPar => write!(f, ")"),
         }
     }
 }
@@ -245,6 +251,8 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
     // A parser for control characters (delimiters, semicolons, etc.)
     //let ctrl = one_of("()[]{};,").map(Literal::Ctrl);
 
+    let lpar = just::<_, _, Simple<char>>('(').to(LexerToken::LPar);
+    let rpar = just::<_, _, Simple<char>>(')').to(LexerToken::RPar);
     let colon = just::<_, _, Simple<char>>(':').to(LexerToken::Colon);
     let boolean_true =
         text::keyword::<_, _, Simple<char>>("true").map(|_| LexerToken::Boolean(true));
@@ -254,8 +262,10 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
     let nil = text::keyword::<_, _, Simple<char>>("nil").map(|_| LexerToken::Nil);
 
     // A single token can be one of the above
-    let token = choice((colon, char_, str_, boolean, nil, number, ns_symbol, symbol))
-        .recover_with(skip_then_retry_until([]));
+    let token = choice((
+        lpar, rpar, colon, char_, str_, boolean, nil, number, ns_symbol, symbol,
+    ))
+    .recover_with(skip_then_retry_until([]));
 
     token
         .padded_by(comment.repeated())
@@ -455,6 +465,8 @@ fn literal_expr_parser() -> impl Parser<LexerToken, Spanned<LiteralExpr>, Error 
             span,
         ),
         LexerToken::Colon => unreachable!(),
+        LexerToken::LPar => unreachable!(),
+        LexerToken::RPar => unreachable!(),
     });
 
     choice((keyword, simple_literal))
@@ -658,6 +670,8 @@ pub fn parse(src: &str) -> ParserResult {
             .iter()
             .filter_map(|(token, span)| match token {
                 LexerToken::Colon => None,
+                LexerToken::LPar => None,
+                LexerToken::RPar => None,
                 LexerToken::Nil | LexerToken::Boolean(_) => Some(ImCompleteSemanticToken {
                     start: span.start,
                     length: span.len(),
@@ -757,6 +771,8 @@ mod tests {
         }
 
         can_parse!(colon, ":", LexerToken::Colon);
+        can_parse!(left_parenthesis, "(", LexerToken::LPar);
+        can_parse!(right_parenthesis, ")", LexerToken::RPar);
         can_parse!(nil, "nil", LexerToken::Nil);
         can_parse!(boolean_true, "true", LexerToken::Boolean(true));
         can_parse!(boolean_false, "false", LexerToken::Boolean(false));
