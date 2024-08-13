@@ -281,9 +281,12 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
     .recover_with(skip_then_retry_until([]));
 
     token
-        .padded_by(comment.repeated())
-        .map_with_span(|tok, span| (tok, span))
+        .map_with_span(|tok, span| {
+            println!("{:?} {:?}", &tok, &span);
+            (tok, span)
+        })
         .padded()
+        .padded_by(comment.ignored().repeated())
         .repeated()
 }
 
@@ -350,13 +353,13 @@ pub struct FormsExpr(Box<Vec<Spanned<FormExpr>>>);
 
 /// List expression:  list : '(' forms ')' ;
 #[derive(Clone, Debug, PartialEq)]
-pub struct ListExpr(FormsExpr);
+pub struct ListExpr(Spanned<FormsExpr>);
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct VectorExpr(FormsExpr);
+pub struct VectorExpr(Spanned<FormsExpr>);
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct MapExpr(FormsExpr);
+pub struct MapExpr(Spanned<FormsExpr>);
 
 // TODO: remove this (legacy)
 // An expression node in the AST. Children are spanned so we can generate useful runtime errors.
@@ -488,23 +491,34 @@ fn literal_expr_parser() -> impl Parser<LexerToken, Spanned<LiteralExpr>, Error 
 
 /// Parse lexer tokens to a form expression, `FormExpr`
 fn form_expr_parser() -> impl Parser<LexerToken, Spanned<FormExpr>, Error = Simple<LexerToken>> {
-    let list =
-        // TODO: elaborate this to forms, not just literals
-        literal_expr_parser()
-            .map_with_span(|le, span| Spanned::new(FormExpr::Literal(Box::new(le)), span))
+    recursive(|form_expr_parser| {
+        let forms = form_expr_parser
             .repeated()
-            .delimited_by(just(LexerToken::LPar), just(LexerToken::RPar))
-            // TODO: change to non-placeholder
-            .map_with_span::<_, _>(|forms, span|
-            Spanned::new(FormExpr::List(
-                Box::new(
-                    Spanned::new(ListExpr(FormsExpr(Box::new(forms))),
-                                 span.clone()))),
-                         span.clone())
-            )
+            .map_with_span(|forms, span| (FormsExpr(Box::new(forms)), span))
+            .labelled("forms");
+
+        let literal = literal_expr_parser()
+            .map(|(lit, span)| {
+                Spanned::new(
+                    FormExpr::Literal(Box::new(Spanned::new(lit, span.clone()))),
+                    span,
+                )
+            })
+            .labelled("literal");
+
+        let list = forms
+            .delimited_by::<_, _, _, _>(just(LexerToken::LPar), just(LexerToken::RPar))
+            .map_with_span(|forms_expr, span: Span| {
+                Spanned::new(
+                    FormExpr::List(Box::new(Spanned::new(ListExpr(forms_expr), span.clone()))),
+                    span.clone(),
+                )
+            })
             .labelled("list");
-    // TODO: add literal, vector, etc.
-    choice((list,)).labelled("form")
+
+        // TODO: add literal, vector, etc.
+        choice((literal, list)).labelled("form")
+    })
 }
 
 //vec![Spanned::new(FormExpr::Literal(Box::new(Spanned::new(LiteralExpr::Nil, span.clone()))), span.clone())]
@@ -701,8 +715,8 @@ pub fn parse(src: &str) -> ParserResult {
     // First, the lexing
     let (tokens, errs) = lexer().parse_recovery(src);
 
-    log::info!("Lexer Tokens: {:?}", tokens);
-    log::info!("Lexer Errors: {:?}", errs);
+    log::debug!("Lexer Tokens: {:?}", tokens);
+    log::debug!("Lexer Errors: {:?}", errs);
 
     let (ast, tokenize_errors, semantic_tokens) = if let Some(tokens) = tokens {
         // First we collect the semantic tokens for syntax highlighting from the lexer tokens
@@ -749,14 +763,13 @@ pub fn parse(src: &str) -> ParserResult {
                 }
             })
             .collect::<Vec<_>>();
-        let len = src.chars().count();
 
+        let len = src.chars().count();
         // Now parse the lexemes (tokens) into an AST
         let (ast, parse_errs) =
             funcs_parser().parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter()));
 
-        //(ast, parse_errs, semantic_tokens)
-        (None, parse_errs, semantic_tokens)
+        (ast, parse_errs, semantic_tokens)
     } else {
         (None, Vec::new(), vec![])
     };
@@ -879,14 +892,19 @@ mod tests {
         }
         #[test]
         fn lexer_can_parse_multiple_tokens_two_with_comment() {
-            let actual = lexer().parse("1\n;; comment\n2");
+            let source = "1\n;; comment\n2";
+            let actual = lexer().parse(source);
             assert_eq!(true, actual.is_ok());
             let tokens = actual.unwrap();
             assert_eq!(2, tokens.len());
             match &tokens[..] {
                 [(t1, s1), (t2, s2)] => {
                     assert_eq!(&LexerToken::Long(1), t1);
+                    assert_eq!("1", &source[Span::from(s1.clone())]);
+                    assert_eq!(0..1, *s1);
                     assert_eq!(&LexerToken::Long(2), t2);
+                    assert_eq!("2", &source[Span::from(s2.clone())]);
+                    assert_eq!(13..14, *s2);
                 }
                 _ => assert!(false),
             }
@@ -947,11 +965,11 @@ mod tests {
                     Spanned::new(LexerToken::LPar, 0..1),
                     Spanned::new(
                         LexerToken::Symbol(SymbolToken::Name(String::from("ns"))),
-                        1..3
+                        1..3,
                     ),
                     Spanned::new(
                         LexerToken::Symbol(SymbolToken::Name(String::from("foo.bar"))),
-                        4..11
+                        4..11,
                     ),
                     Spanned::new(LexerToken::RPar, 11..12),
                 ],
@@ -968,7 +986,7 @@ mod tests {
                 fn $tc_name() {
                     let (t, errors) = literal_expr_parser().parse_recovery($input);
                     assert!(t.is_some());
-                    let (expr, span) = t.unwrap();
+                    let (expr, _span) = t.unwrap();
                     assert_eq!($expected, expr);
                 }
             };
@@ -1044,6 +1062,7 @@ mod tests {
                 #[test]
                 fn $tc_name() {
                     let (t, errors) = form_expr_parser().parse_recovery($input);
+                    assert_eq!(errors, vec![]);
                     assert!(t.is_some());
                     let (expr, span): Spanned<FormExpr> = t.unwrap();
                     println!("{:?}", expr.clone());
@@ -1052,6 +1071,14 @@ mod tests {
                 }
             };
         }
+
+        can_parse!(literal_single, [LexerToken::Nil,], |t| match t {
+            FormExpr::Literal(le) => match *le {
+                (LiteralExpr::Nil, _span) => true,
+                _ => false,
+            },
+            _ => false,
+        });
 
         can_parse!(
             list_flat_single_literal,
@@ -1062,7 +1089,7 @@ mod tests {
             ],
             |t| match t {
                 FormExpr::List(le) => match *le {
-                    (ListExpr(FormsExpr(forms)), _span) => match &(*forms)[..] {
+                    (ListExpr((FormsExpr(forms), _)), _span) => match &(*forms)[..] {
                         [(FormExpr::Literal(lit), _)] => match &**lit {
                             (LiteralExpr::Str(s), _span) => s == "foo",
                             _ => false,
@@ -1085,7 +1112,7 @@ mod tests {
             ],
             |t| match t {
                 FormExpr::List(le) => match *le {
-                    (ListExpr(FormsExpr(forms)), _span) => match &(*forms)[..] {
+                    (ListExpr((FormsExpr(forms), _)), _span) => match &(*forms)[..] {
                         [(FormExpr::Literal(ns_sym), _), (FormExpr::Literal(name_sym), _)] =>
                             match (&**ns_sym, &**name_sym) {
                                 ((LiteralExpr::Symbol(ns), _), (LiteralExpr::Symbol(name), _)) =>
