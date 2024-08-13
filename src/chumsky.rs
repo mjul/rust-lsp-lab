@@ -322,29 +322,28 @@ pub enum FileExpr {
     Forms(Vec<FormExpr>),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum FormExpr {
-    Literal(LiteralExpr),
-    List(ListExpr),
-    Vector(VectorExpr),
-    Map(MapExpr),
+    Literal(Box<Spanned<LiteralExpr>>),
+    List(Box<Spanned<ListExpr>>),
+    Vector(Box<VectorExpr>),
+    Map(Box<MapExpr>),
     // No reader macros
     // ReaderMacro(ReaderMacroExpr)
 }
 
-#[derive(Debug)]
-pub enum FormsExpr {
-    Forms(Vec<FormExpr>),
-}
+#[derive(Clone, Debug, PartialEq)]
+pub struct FormsExpr(Box<Vec<Spanned<FormExpr>>>);
 
-#[derive(Debug)]
-pub enum ListExpr {}
+/// List expression:  list : '(' forms ')' ;
+#[derive(Clone, Debug, PartialEq)]
+pub struct ListExpr(FormsExpr);
 
-#[derive(Debug)]
-pub enum VectorExpr {}
+#[derive(Clone, Debug, PartialEq)]
+pub struct VectorExpr(FormsExpr);
 
-#[derive(Debug)]
-pub enum MapExpr {}
+#[derive(Clone, Debug, PartialEq)]
+pub struct MapExpr(FormsExpr);
 
 // TODO: remove this (legacy)
 // An expression node in the AST. Children are spanned so we can generate useful runtime errors.
@@ -427,6 +426,7 @@ fn lexer_to_literal_expr(input: &str) -> impl Parser<char, Spanned<LiteralExpr>,
 }
 */
 
+/// Parse lexer tokens to a literal expression, `LiteralExpr`
 fn literal_expr_parser() -> impl Parser<LexerToken, Spanned<LiteralExpr>, Error = Simple<LexerToken>>
 {
     let keyword = just(LexerToken::Colon)
@@ -453,24 +453,48 @@ fn literal_expr_parser() -> impl Parser<LexerToken, Spanned<LiteralExpr>, Error 
             _ => unreachable!(),
         });
 
-    let simple_literal = any::<LexerToken, _>().map_with_span(|t, span| match t {
-        LexerToken::Nil => Spanned::new(LiteralExpr::Nil, span),
-        LexerToken::Character(c) => Spanned::new(LiteralExpr::Character(c), span),
-        LexerToken::String(s) => Spanned::new(LiteralExpr::Str(s), span),
-        LexerToken::Long(n) => Spanned::new(LiteralExpr::Number(format!("{}", n)), span),
-        LexerToken::Boolean(b) => Spanned::new(LiteralExpr::Bool(b), span),
-        LexerToken::Symbol(s) => Spanned::new(LiteralExpr::Symbol(s.to_string()), span),
-        LexerToken::NsSymbol(n, s) => Spanned::new(
-            LiteralExpr::Symbol(format!("{}/{}", n.to_string(), s.to_string())),
-            span,
-        ),
-        LexerToken::Colon => unreachable!(),
-        LexerToken::LPar => unreachable!(),
-        LexerToken::RPar => unreachable!(),
-    });
+    let simple_literal = none_of::<LexerToken, _, _>(vec![LexerToken::LPar, LexerToken::RPar])
+        .map_with_span(|t, span| match t {
+            LexerToken::Nil => Spanned::new(LiteralExpr::Nil, span),
+            LexerToken::Character(c) => Spanned::new(LiteralExpr::Character(c), span),
+            LexerToken::String(s) => Spanned::new(LiteralExpr::Str(s), span),
+            LexerToken::Long(n) => Spanned::new(LiteralExpr::Number(format!("{}", n)), span),
+            LexerToken::Boolean(b) => Spanned::new(LiteralExpr::Bool(b), span),
+            LexerToken::Symbol(s) => Spanned::new(LiteralExpr::Symbol(s.to_string()), span),
+            LexerToken::NsSymbol(n, s) => Spanned::new(
+                LiteralExpr::Symbol(format!("{}/{}", n.to_string(), s.to_string())),
+                span,
+            ),
+            LexerToken::Colon => unreachable!(),
+            LexerToken::LPar => unreachable!(),
+            LexerToken::RPar => unreachable!(),
+        });
 
     choice((keyword, simple_literal))
 }
+
+/// Parse lexer tokens to a form expression, `FormExpr`
+fn form_expr_parser() -> impl Parser<LexerToken, Spanned<FormExpr>, Error = Simple<LexerToken>> {
+    let list =
+        // TODO: elaborate this to forms, not just literals
+        literal_expr_parser()
+            .map_with_span(|le, span| Spanned::new(FormExpr::Literal(Box::new(le)), span))
+            .repeated()
+            .delimited_by(just(LexerToken::LPar), just(LexerToken::RPar))
+            // TODO: change to non-placeholder
+            .map_with_span::<_, _>(|forms, span|
+            Spanned::new(FormExpr::List(
+                Box::new(
+                    Spanned::new(ListExpr(FormsExpr(Box::new(forms))),
+                                 span.clone()))),
+                         span.clone())
+            )
+            .labelled("list");
+    // TODO: add literal, vector, etc.
+    choice((list,)).labelled("form")
+}
+
+//vec![Spanned::new(FormExpr::Literal(Box::new(Spanned::new(LiteralExpr::Nil, span.clone()))), span.clone())]
 
 // TODO: change to Expr
 fn expr_parser() -> impl Parser<LiteralExpr, Spanned<Expr>, Error = Simple<LiteralExpr>> + Clone {
@@ -968,6 +992,46 @@ mod tests {
             LiteralExpr::Keyword(KeywordLiteral::MacroKeyword(SymbolLiteral::SimpleSymbol(
                 SymbolToken::Name(String::from("foo"))
             )))
+        );
+    }
+
+    mod form_expr_parsing {
+        use super::*;
+
+        macro_rules! can_parse {
+            ($tc_name:ident, $input:expr, $matcher:expr) => {
+                #[test]
+                fn $tc_name() {
+                    let (t, errors) = form_expr_parser().parse_recovery($input);
+                    assert!(t.is_some());
+                    let (expr, span): Spanned<FormExpr> = t.unwrap();
+                    println!("{:?}", expr.clone());
+                    let is_match = $matcher(expr);
+                    assert!(is_match);
+                }
+            };
+        }
+
+        can_parse!(
+            list_flat_single_literal,
+            [
+                LexerToken::LPar,
+                LexerToken::String(String::from("foo")),
+                LexerToken::RPar,
+            ],
+            |t| match t {
+                FormExpr::List(le) => match *le {
+                    (ListExpr(FormsExpr(forms)), _span) => match &(*forms)[..] {
+                        [(FormExpr::Literal(lit), _)] => match &**lit {
+                            (LiteralExpr::Str(s), _span) => s == "foo",
+                            _ => false,
+                        },
+                        _ => false,
+                    },
+                    _ => false,
+                },
+                _ => false,
+            }
         );
     }
 }
