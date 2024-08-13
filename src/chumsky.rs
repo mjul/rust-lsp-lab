@@ -689,6 +689,7 @@ pub fn parse(src: &str) -> ParserResult {
     let (tokens, errs) = lexer().parse_recovery(src);
 
     let (ast, tokenize_errors, semantic_tokens) = if let Some(tokens) = tokens {
+        // First we collect the semantic tokens for syntax highlighting from the lexer tokens
         // info!("Tokens = {:?}", tokens);
         let semantic_tokens = tokens
             .iter()
