@@ -151,18 +151,21 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
     // A parser for comments
     let comment = just(";")
         .then(take_until(text::newline::<Simple<char>>()))
-        .padded();
+        .padded()
+        .labelled("comment");
 
     // A parser for simple strings
     let str_ = just::<_, _, Simple<char>>('"')
         .ignore_then(filter(|c| *c != '"').repeated())
         .then_ignore(just('"'))
         .collect::<String>()
-        .map(LexerToken::String);
+        .map(LexerToken::String)
+        .labelled("string");
 
     // A parser for longs
-    let long_number =
-        text::int::<_, Simple<char>>(10).map(|s| LexerToken::Long(s.parse().unwrap()));
+    let long_number = text::int::<_, Simple<char>>(10)
+        .map(|s| LexerToken::Long(s.parse().unwrap()))
+        .labelled("LONG");
     // TODO: negative numbers
     // TODO: floats
     // TODO: floats, other bases
@@ -172,21 +175,24 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
         .collect::<String>()
         .map(|s| LexerToken::Float(Float::parse(s)));
     */
-    let number = long_number;
+    let number = long_number.labelled("number");
 
     // A parser for characters (simplified)
     let char_ = just::<_, _, Simple<char>>('\'')
         .ignore_then(none_of("'"))
         .then_ignore(just('\''))
-        .map(|c| LexerToken::Character(c));
+        .map(|c| LexerToken::Character(c))
+        .labelled("character");
 
     // TODO: use whitespace lexer for last part:
-    let symbol_head = none_of::<_, _, Simple<char>>("0123456789^`\\\"#~@:/%()[]{} \n\r\t");
+    let symbol_head = none_of::<_, _, Simple<char>>("0123456789^`\\\"#~@:/%()[]{} \n\r\t")
+        .labelled("SYMBOL_HEAD fragment");
     let symbol_rest = choice::<_, Simple<char>>((
         symbol_head.clone(),
         one_of::<_, _, Simple<char>>("0123456789"),
         just::<_, _, Simple<char>>('.'),
-    ));
+    ))
+    .labelled("SYMBOL_REST fragment");
 
     let name = symbol_head
         .then(symbol_rest.clone().repeated())
@@ -215,14 +221,19 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
         just::<_, _, Simple<char>>('.').to(SymbolToken::Dot),
         just::<_, _, Simple<char>>('/').to(SymbolToken::Slash),
         name.clone().map(|NameToken(s)| SymbolToken::Name(s)),
-    ));
+    ))
+    .labelled("SYMBOL");
 
-    let symbol = symbol_token.clone().map(|st| LexerToken::Symbol(st));
+    let symbol = symbol_token
+        .clone()
+        .map(|st| LexerToken::Symbol(st))
+        .labelled("simple_symbol");
 
     let ns_symbol = name
         .then(just('/'))
         .then(symbol_token)
-        .map(|((n, _slash), symbol)| LexerToken::NsSymbol(n, symbol));
+        .map(|((n, _slash), symbol)| LexerToken::NsSymbol(n, symbol))
+        .labelled("ns_symbol");
 
     /*
             let simple_keyword_ = just(':')
@@ -257,9 +268,11 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
     let boolean_true =
         text::keyword::<_, _, Simple<char>>("true").map(|_| LexerToken::Boolean(true));
     let boolean_false = text::keyword("false").map(|_| LexerToken::Boolean(false));
-    let boolean = boolean_true.or(boolean_false);
+    let boolean = boolean_true.or(boolean_false).labelled("BOOLEAN");
 
-    let nil = text::keyword::<_, _, Simple<char>>("nil").map(|_| LexerToken::Nil);
+    let nil = text::keyword::<_, _, Simple<char>>("nil")
+        .map(|_| LexerToken::Nil)
+        .labelled("NIL");
 
     // A single token can be one of the above
     let token = choice((
@@ -688,6 +701,9 @@ pub fn parse(src: &str) -> ParserResult {
     // First, the lexing
     let (tokens, errs) = lexer().parse_recovery(src);
 
+    log::info!("Lexer Tokens: {:?}", tokens);
+    log::info!("Lexer Errors: {:?}", errs);
+
     let (ast, tokenize_errors, semantic_tokens) = if let Some(tokens) = tokens {
         // First we collect the semantic tokens for syntax highlighting from the lexer tokens
         // info!("Tokens = {:?}", tokens);
@@ -734,11 +750,13 @@ pub fn parse(src: &str) -> ParserResult {
             })
             .collect::<Vec<_>>();
         let len = src.chars().count();
+
         // Now parse the lexemes (tokens) into an AST
         let (ast, parse_errs) =
             funcs_parser().parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter()));
 
-        (ast, parse_errs, semantic_tokens)
+        //(ast, parse_errs, semantic_tokens)
+        (None, parse_errs, semantic_tokens)
     } else {
         (None, Vec::new(), vec![])
     };
