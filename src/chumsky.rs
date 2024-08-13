@@ -1034,5 +1034,30 @@ mod tests {
                 _ => false,
             }
         );
+
+        can_parse!(
+            list_flat_multiple_ns_definition_minimal,
+            [
+                LexerToken::LPar,
+                LexerToken::Symbol(SymbolToken::Name(String::from("ns"))),
+                LexerToken::Symbol(SymbolToken::Name(String::from("foo.bar"))),
+                LexerToken::RPar,
+            ],
+            |t| match t {
+                FormExpr::List(le) => match *le {
+                    (ListExpr(FormsExpr(forms)), _span) => match &(*forms)[..] {
+                        [(FormExpr::Literal(ns_sym), _), (FormExpr::Literal(name_sym), _)] =>
+                            match (&**ns_sym, &**name_sym) {
+                                ((LiteralExpr::Symbol(ns), _), (LiteralExpr::Symbol(name), _)) =>
+                                    ns == "ns" && name == "foo.bar",
+                                _ => false,
+                            },
+                        _ => false,
+                    },
+                    _ => false,
+                },
+                _ => false,
+            }
+        );
     }
 }
