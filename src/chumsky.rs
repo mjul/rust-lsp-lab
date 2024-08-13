@@ -936,6 +936,28 @@ mod tests {
                 _ => assert!(false),
             }
         }
+
+        #[test]
+        fn lexer_can_parse_code_snippet_ns_form_simple() {
+            let (tokens, errors) = lexer().parse_recovery("(ns foo.bar)");
+            assert!(tokens.is_some());
+            assert_eq!(errors, vec![]);
+            assert_eq!(
+                vec![
+                    Spanned::new(LexerToken::LPar, 0..1),
+                    Spanned::new(
+                        LexerToken::Symbol(SymbolToken::Name(String::from("ns"))),
+                        1..3
+                    ),
+                    Spanned::new(
+                        LexerToken::Symbol(SymbolToken::Name(String::from("foo.bar"))),
+                        4..11
+                    ),
+                    Spanned::new(LexerToken::RPar, 11..12),
+                ],
+                tokens.unwrap()
+            );
+        }
     }
     mod literal_expr_parsing {
         use super::*;
