@@ -559,6 +559,16 @@ fn form_expr_parser() -> impl Parser<LexerToken, Spanned<FormExpr>, Error = Simp
     })
 }
 
+/// Parse a lexer token stream of a source file to a `FileExpr`.
+fn file_expr_parser() -> impl Parser<LexerToken, FileExpr, Error = Simple<LexerToken>> {
+    form_expr_parser()
+        .repeated()
+        .then_ignore(end())
+        // No span since this is the whole file anyway
+        .map(|forms| FileExpr::Forms(forms))
+}
+
+#[deprecated]
 // TODO: change to Expr
 fn expr_parser() -> impl Parser<LiteralExpr, Spanned<Expr>, Error = Simple<LiteralExpr>> + Clone {
     recursive(|expr| {
@@ -1163,4 +1173,60 @@ mod tests {
             }
         );
     }
+
+    mod file_expr_parsing {
+        use super::*;
+        fn parse(input: Vec<LexerToken>) -> FileExpr {
+            let (t, errors) = file_expr_parser().parse_recovery(input);
+            assert_eq!(errors, vec![]);
+            assert!(t.is_some());
+            let expr = t.unwrap();
+            println!("{:?}", expr.clone());
+            expr
+        }
+
+        #[test]
+        fn can_parse_empty_file() {
+            let actual = parse(vec![]);
+            assert_eq!(FileExpr::Forms(vec![]), actual);
+        }
+
+        #[test]
+        fn can_parse_file_with_ns() {
+            let actual = parse(vec![
+                // (ns foo.bar)
+                LexerToken::LPar,
+                LexerToken::Symbol(SymbolToken::Name(String::from("ns"))),
+                LexerToken::Symbol(SymbolToken::Name(String::from("foo.bar"))),
+                LexerToken::RPar,
+            ]);
+            let FileExpr::Forms(forms) = actual;
+            assert_eq!(1, forms.len());
+            let (form, span) = &forms[0];
+            assert!(form.is_list());
+        }
+
+        #[test]
+        fn can_parse_file_with_ns_and_code() {
+            let actual = parse(vec![
+                // (ns foo.bar)
+                LexerToken::LPar,
+                LexerToken::Symbol(SymbolToken::Name(String::from("ns"))),
+                LexerToken::Symbol(SymbolToken::Name(String::from("foo.bar"))),
+                LexerToken::RPar,
+                // (def n 42)
+                LexerToken::LPar,
+                LexerToken::Symbol(SymbolToken::Name(String::from("def"))),
+                LexerToken::Symbol(SymbolToken::Name(String::from("n"))),
+                LexerToken::Long(42),
+                LexerToken::RPar,
+            ]);
+            let FileExpr::Forms(forms) = actual;
+            assert_eq!(2, forms.len());
+            assert!(forms[0].0.is_list());
+            assert!(forms[1].0.is_list());
+        }
+    }
+
+
 }
