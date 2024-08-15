@@ -26,6 +26,12 @@ pub struct ImCompleteSemanticToken {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NameToken(String);
 
+impl From<&str> for NameToken {
+    fn from(value: &str) -> Self {
+        NameToken(String::from(value))
+    }
+}
+
 impl std::fmt::Display for NameToken {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -982,35 +988,88 @@ mod tests {
             /
             foo
             foo.bar/baz
+            :
+            ()
+            []
+            {}
             "#,
             );
             assert_eq!(true, actual.is_ok());
             let tokens = actual.unwrap();
-            assert_eq!(9, tokens.len());
-            match &tokens[..] {
-                [(t1, _), (t2, _), (t3, _), (t4, _), (t5, _), (t6, _), (t7, _), (t8, _), (t9, _)] =>
-                {
-                    assert_eq!(&LexerToken::Nil, t1);
-                    assert_eq!(&LexerToken::Boolean(true), t2);
-                    assert_eq!(&LexerToken::Boolean(false), t3);
-                    assert_eq!(&LexerToken::Long(1), t4);
-                    assert_eq!(&LexerToken::String("foo-string".to_string()), t5);
-                    assert_eq!(&LexerToken::Symbol(SymbolToken::Dot), t6);
-                    assert_eq!(&LexerToken::Symbol(SymbolToken::Slash), t7);
-                    assert_eq!(
-                        &LexerToken::Symbol(SymbolToken::Name(String::from("foo"))),
-                        t8
-                    );
-                    assert_eq!(
-                        &LexerToken::NsSymbol(
-                            NameToken(String::from("foo.bar")),
-                            SymbolToken::Name(String::from("baz")),
-                        ),
-                        t9
-                    );
-                }
-                _ => assert!(false),
-            }
+            assert_eq!(16, tokens.len());
+            let lts: Vec<LexerToken> = tokens.into_iter().map(|(t, s)| t).collect();
+            assert_eq!(LexerToken::Nil, lts[0]);
+            assert_eq!(LexerToken::Boolean(true), lts[1]);
+            assert_eq!(LexerToken::Boolean(false), lts[2]);
+            assert_eq!(LexerToken::Long(1), lts[3]);
+            assert_eq!(LexerToken::String("foo-string".to_string()), lts[4]);
+            assert_eq!(LexerToken::Symbol(SymbolToken::Dot), lts[5]);
+            assert_eq!(LexerToken::Symbol(SymbolToken::Slash), lts[6]);
+            assert_eq!(
+                LexerToken::Symbol(SymbolToken::Name(String::from("foo"))),
+                lts[7]
+            );
+            assert_eq!(
+                LexerToken::NsSymbol(
+                    NameToken(String::from("foo.bar")),
+                    SymbolToken::Name(String::from("baz")),
+                ),
+                lts[8]
+            );
+            assert_eq!(LexerToken::Colon, lts[9]);
+            assert_eq!(LexerToken::LPar, lts[10]);
+            assert_eq!(LexerToken::RPar, lts[11]);
+            assert_eq!(LexerToken::LBra, lts[12]);
+            assert_eq!(LexerToken::RBra, lts[13]);
+            assert_eq!(LexerToken::LCurl, lts[14]);
+            assert_eq!(LexerToken::RCurl, lts[15]);
+        }
+
+        #[test]
+        fn lexer_can_parse_keyword_variants() {
+            let source = r#"
+            :keyword
+            :kw/keyword
+            :k.w/keyword
+            ::keyword
+            ::kw/keyword
+            ::k.w/keyword
+            "#;
+            let (tokens, errors) = lexer().parse_recovery(source);
+            assert_eq!(errors, vec![]);
+            let tokens: Vec<LexerToken> = tokens.unwrap().into_iter().map(|(t, s)| t).collect();
+            assert_eq!(
+                vec![
+                    LexerToken::Colon,
+                    LexerToken::Symbol(SymbolToken::Name(String::from("keyword"))),
+                    LexerToken::Colon,
+                    LexerToken::NsSymbol(
+                        NameToken::from("kw"),
+                        SymbolToken::Name(String::from("keyword"))
+                    ),
+                    LexerToken::Colon,
+                    LexerToken::NsSymbol(
+                        NameToken::from("k.w"),
+                        SymbolToken::Name(String::from("keyword"))
+                    ),
+                    LexerToken::Colon,
+                    LexerToken::Colon,
+                    LexerToken::Symbol(SymbolToken::Name(String::from("keyword"))),
+                    LexerToken::Colon,
+                    LexerToken::Colon,
+                    LexerToken::NsSymbol(
+                        NameToken::from("kw"),
+                        SymbolToken::Name(String::from("keyword"))
+                    ),
+                    LexerToken::Colon,
+                    LexerToken::Colon,
+                    LexerToken::NsSymbol(
+                        NameToken::from("k.w"),
+                        SymbolToken::Name(String::from("keyword"))
+                    ),
+                ],
+                tokens
+            );
         }
 
         #[test]
