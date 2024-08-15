@@ -294,10 +294,7 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
     .recover_with(skip_then_retry_until([]));
 
     token
-        .map_with_span(|tok, span| {
-            println!("{:?} {:?}", &tok, &span);
-            (tok, span)
-        })
+        .map_with_span(|tok, span| (tok, span))
         .padded()
         .padded_by(comment.ignored().repeated())
         .repeated()
@@ -1119,7 +1116,6 @@ mod tests {
                     assert_eq!(errors, vec![]);
                     assert!(t.is_some());
                     let (expr, span): Spanned<FormExpr> = t.unwrap();
-                    println!("{:?}", expr.clone());
                     let is_match = $matcher(expr);
                     assert!(is_match);
                 }
@@ -1219,7 +1215,6 @@ mod tests {
             assert_eq!(errors, vec![]);
             assert!(t.is_some());
             let expr = t.unwrap();
-            println!("{:?}", expr.clone());
             expr
         }
 
@@ -1291,7 +1286,6 @@ mod tests {
 
             assert_eq!(parse_errors, vec![]);
 
-            println!("{:?}", ast);
             assert!(ast.is_some());
             assert!(ast.unwrap().is_empty());
         }
@@ -1302,8 +1296,6 @@ mod tests {
                    (defn f [x] (inc x))
                    (defn g [x] (f (f x)))
                 "#;
-
-            println!("{}", source.find(" f ").unwrap());
 
             let actual = parse(source);
             let ParserResult {
@@ -1323,7 +1315,6 @@ mod tests {
 
             assert_eq!(parse_errors, vec![]);
 
-            println!("{:?}", ast);
             assert!(ast.is_some());
 
             let funcs = ast.unwrap();
