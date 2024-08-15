@@ -320,6 +320,7 @@ impl std::fmt::Display for Value {
     }
 }
 
+#[deprecated]
 #[derive(Clone, Debug)]
 pub enum BinaryOp {
     Add,
@@ -332,38 +333,57 @@ pub enum BinaryOp {
 
 pub type Spanned<T> = (T, Span);
 
-#[derive(Debug)]
+/// The top-most AST expression, representing a complete source file, a sequence of `FormExpr`.
+/// ```EBNF
+///   file : form* ;
+/// ```
+#[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub enum FileExpr {
-    Error,
-    Forms(Vec<FormExpr>),
+    Forms(Vec<Spanned<FormExpr>>),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub enum FormExpr {
     Literal(Box<Spanned<LiteralExpr>>),
     List(Box<Spanned<ListExpr>>),
     Vector(Box<VectorExpr>),
     Map(Box<MapExpr>),
+    // TODO: set
     // No reader macros
     // ReaderMacro(ReaderMacroExpr)
 }
 
-#[derive(Clone, Debug, PartialEq)]
+/// AST expression for a sequence of forms (`FormExpr`).
+/// ```EBNF
+///   form = forms* ;
+/// ```
+#[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub struct FormsExpr(Box<Vec<Spanned<FormExpr>>>);
 
-/// List expression:  list : '(' forms ')' ;
-#[derive(Clone, Debug, PartialEq)]
+/// List expression:
+/// ```EBNF
+///   list : '(' forms ')' ;
+/// ```
+#[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub struct ListExpr(Spanned<FormsExpr>);
 
-#[derive(Clone, Debug, PartialEq)]
+/// Vector expression:
+/// ```EBNF
+///   vector : '[' forms ']' ;
+/// ```
+#[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub struct VectorExpr(Spanned<FormsExpr>);
 
-#[derive(Clone, Debug, PartialEq)]
+/// Map expression:
+/// ```EBNF
+///   map : '{' (form form)* '}' ;
+/// ```
+#[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub struct MapExpr(Spanned<FormsExpr>);
 
 // TODO: remove this (legacy)
 // An expression node in the AST. Children are spanned so we can generate useful runtime errors.
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Error,
     Value(Value),
@@ -404,9 +424,8 @@ impl Expr {
     }
 }
 
-// TODO: remove this (legacy)
 // A function node in the AST.
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Func {
     pub args: Vec<Spanned<String>>,
     pub body: Spanned<Expr>,
@@ -520,8 +539,6 @@ fn form_expr_parser() -> impl Parser<LexerToken, Spanned<FormExpr>, Error = Simp
         choice((literal, list)).labelled("form")
     })
 }
-
-//vec![Spanned::new(FormExpr::Literal(Box::new(Spanned::new(LiteralExpr::Nil, span.clone()))), span.clone())]
 
 // TODO: change to Expr
 fn expr_parser() -> impl Parser<LiteralExpr, Spanned<Expr>, Error = Simple<LiteralExpr>> + Clone {
