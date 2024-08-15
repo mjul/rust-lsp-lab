@@ -167,7 +167,9 @@ impl fmt::Display for LiteralExpr {
 fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
     // A parser for comments
     let comment = just(";")
-        .then(take_until(text::newline::<Simple<char>>()))
+        .then(take_until(
+            text::newline::<Simple<char>>().or(end().rewind()),
+        ))
         .padded()
         .labelled("comment");
 
@@ -921,6 +923,17 @@ mod tests {
                 NameToken(String::from("name.space")),
                 SymbolToken::Name(String::from("foo")),
             )
+        );
+        can_parse!(comment_at_beginning, ";; Comment\n1", LexerToken::Long(1));
+        can_parse!(
+            comment_at_end_no_newline,
+            "1\n;; Comment",
+            LexerToken::Long(1)
+        );
+        can_parse!(
+            comment_at_end_with_newline,
+            "1\n;; Comment\n",
+            LexerToken::Long(1)
         );
 
         #[test]
