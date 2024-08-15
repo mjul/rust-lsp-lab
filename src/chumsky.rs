@@ -360,8 +360,8 @@ pub enum FileExpr {
 pub enum FormExpr {
     Literal(Box<Spanned<LiteralExpr>>),
     List(Box<Spanned<ListExpr>>),
-    Vector(Box<VectorExpr>),
-    Map(Box<MapExpr>),
+    Vector(Box<Spanned<VectorExpr>>),
+    Map(Box<Spanned<ListExpr>>),
     // TODO: set
     // No reader macros
     // ReaderMacro(ReaderMacroExpr)
@@ -570,6 +570,7 @@ fn form_expr_parser() -> impl Parser<LexerToken, Spanned<FormExpr>, Error = Simp
             .labelled("literal");
 
         let list = forms
+            .clone()
             .delimited_by::<_, _, _, _>(just(LexerToken::LPar), just(LexerToken::RPar))
             .map_with_span(|forms_expr, span: Span| {
                 Spanned::new(
@@ -579,8 +580,18 @@ fn form_expr_parser() -> impl Parser<LexerToken, Spanned<FormExpr>, Error = Simp
             })
             .labelled("list");
 
-        // TODO: add literal, vector, etc.
-        choice((literal, list)).labelled("form")
+        let vector = forms
+            .delimited_by::<_, _, _, _>(just(LexerToken::LBra), just(LexerToken::RBra))
+            .map_with_span(|forms_expr, span: Span| {
+                Spanned::new(
+                    FormExpr::Vector(Box::new(Spanned::new(VectorExpr(forms_expr), span.clone()))),
+                    span.clone(),
+                )
+            })
+            .labelled("vector");
+
+        // TODO: add map etc.
+        choice((literal, list, vector)).labelled("form")
     })
 }
 
@@ -1198,6 +1209,36 @@ mod tests {
                                     ns == "ns" && name == "foo.bar",
                                 _ => false,
                             },
+                        _ => false,
+                    },
+                    _ => false,
+                },
+                _ => false,
+            }
+        );
+
+        can_parse!(
+            vector_flat_empty,
+            [LexerToken::LBra, LexerToken::RBra,],
+            |t| match t {
+                FormExpr::Vector(ve) => match *ve {
+                    (VectorExpr((FormsExpr(forms), _)), _span) => forms.is_empty(),
+                    _ => false,
+                },
+                _ => false,
+            }
+        );
+
+        can_parse!(
+            vector_flat_single_literal,
+            [LexerToken::LBra, LexerToken::Long(1), LexerToken::RBra,],
+            |t| match t {
+                FormExpr::Vector(ve) => match *ve {
+                    (VectorExpr((FormsExpr(forms), _)), _span) => match &(*forms)[..] {
+                        [(FormExpr::Literal(lit), _)] => match &**lit {
+                            (LiteralExpr::Number(s), _span) => s == "1",
+                            _ => false,
+                        },
                         _ => false,
                     },
                     _ => false,
