@@ -767,56 +767,39 @@ pub fn parse(src: &str) -> ParserResult {
     // First, the lexing
     let (tokens, lexer_errors) = lexer().parse_recovery(src);
 
-    log::debug!("Lexer Tokens: {:?}", tokens);
-    log::debug!("Lexer Errors: {:?}", lexer_errors);
+    //log::debug!("Lexer Tokens: {:?}", tokens);
+    //log::debug!("Lexer Errors: {:?}", lexer_errors);
 
     let (ast, tokenize_errors, semantic_tokens) = if let Some(tokens) = tokens {
         // First we collect the semantic tokens for syntax highlighting from the lexer tokens
         // info!("Tokens = {:?}", tokens);
         let semantic_tokens = tokens
             .iter()
-            .filter_map(|(token, span)| match token {
-                LexerToken::Colon
-                | LexerToken::LPar
-                | LexerToken::RPar
-                | LexerToken::LBra
-                | LexerToken::RBra
-                | LexerToken::LCurl
-                | LexerToken::RCurl => None,
-                LexerToken::Nil | LexerToken::Boolean(_) => Some(ImCompleteSemanticToken {
+            .filter_map(|(token, span)| {
+                let token_type = match token {
+                    LexerToken::Colon
+                    | LexerToken::LPar
+                    | LexerToken::RPar
+                    | LexerToken::LBra
+                    | LexerToken::RBra
+                    | LexerToken::LCurl
+                    | LexerToken::RCurl => None,
+                    LexerToken::Nil | LexerToken::Boolean(_) => {
+                        Some(SemanticTokenType::KEYWORD.clone())
+                    }
+                    LexerToken::Character(_) | LexerToken::String(_) => {
+                        Some(SemanticTokenType::STRING.clone())
+                    }
+                    LexerToken::Long(_) => Some(SemanticTokenType::NUMBER.clone()),
+                    LexerToken::Symbol(_) | LexerToken::NsSymbol(_, _) => {
+                        Some(SemanticTokenType::VARIABLE.clone())
+                    }
+                };
+                token_type.map(|tt| ImCompleteSemanticToken {
                     start: span.start,
                     length: span.len(),
-                    token_type: LEGEND_TYPE
-                        .iter()
-                        .position(|item| item == &SemanticTokenType::KEYWORD)
-                        .unwrap(),
-                }),
-                LexerToken::Character(_) | LexerToken::String(_) => Some(ImCompleteSemanticToken {
-                    start: span.start,
-                    length: span.len(),
-                    token_type: LEGEND_TYPE
-                        .iter()
-                        .position(|item| item == &SemanticTokenType::STRING)
-                        .unwrap(),
-                }),
-                LexerToken::Long(_) => Some(ImCompleteSemanticToken {
-                    start: span.start,
-                    length: span.len(),
-                    token_type: LEGEND_TYPE
-                        .iter()
-                        .position(|item| item == &SemanticTokenType::NUMBER)
-                        .unwrap(),
-                }),
-                LexerToken::Symbol(_) | LexerToken::NsSymbol(_, _) => {
-                    Some(ImCompleteSemanticToken {
-                        start: span.start,
-                        length: span.len(),
-                        token_type: LEGEND_TYPE
-                            .iter()
-                            .position(|item| item == &SemanticTokenType::VARIABLE)
-                            .unwrap(),
-                    })
-                }
+                    token_type: LEGEND_TYPE.iter().position(|item| item == &tt).unwrap(),
+                })
             })
             .collect::<Vec<_>>();
 
