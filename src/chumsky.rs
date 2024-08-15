@@ -490,6 +490,7 @@ fn literal_expr_parser() -> impl Parser<LexerToken, Spanned<LiteralExpr>, Error 
         });
 
     let simple_literal = none_of::<LexerToken, _, _>(vec![
+        LexerToken::Colon,
         LexerToken::LPar,
         LexerToken::RPar,
         LexerToken::LBra,
