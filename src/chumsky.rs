@@ -6,12 +6,11 @@ use core::fmt;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
+use crate::semantic_token::LEGEND_TYPE;
 use chumsky::Parser;
 use chumsky::{prelude::*, stream::Stream};
 use serde::{Deserialize, Serialize};
 use tower_lsp::lsp_types::SemanticTokenType;
-
-use crate::semantic_token::LEGEND_TYPE;
 
 pub type Span = std::ops::Range<usize>;
 
@@ -704,74 +703,63 @@ fn expr_parser() -> impl Parser<LiteralExpr, Spanned<Expr>, Error = Simple<Liter
     })
 }
 
+/// Parser that extracts the functions
 pub fn funcs_parser(
-) -> impl Parser<LexerToken, HashMap<String, Func>, Error = Simple<LexerToken>> + Clone {
-    let ident = filter_map(|span, tok| match tok {
-        //Literal::Ident(ident) => Ok(ident),
-        _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
-    });
-
-    ident.then_ignore(end())
-
-    // Argument lists are just identifiers separated by commas, surrounded by parentheses
-    /*
-        let args = ident
-            .map_with_span(|name, span| (name, span))
-            .separated_by(just(Literal::Ctrl(',')))
-            .allow_trailing()
-            .delimited_by(just(Literal::Ctrl('(')), just(Literal::Ctrl(')')))
-            .labelled("function args");
-    */
-    /*
-    let func = just(Literal::Fn)
-        .ignore_then(
-            ident
-                .map_with_span(|name, span| (name, span))
-                .labelled("function name"),
-        )
-        .then(args)
-        .then(
-            expr_parser()
-                .delimited_by(just(Literal::Ctrl('{')), just(Literal::Ctrl('}')))
-                // Attempt to recover anything that looks like a function body but contains errors
-                .recover_with(nested_delimiters(
-                    Literal::Ctrl('{'),
-                    Literal::Ctrl('}'),
-                    [
-                        (Literal::Ctrl('('), Literal::Ctrl(')')),
-                        (Literal::Ctrl('['), Literal::Ctrl(']')),
-                    ],
-                    |span| (Expr::Error, span),
-                )),
-        )
-        .map_with_span(|((name, args), body), span| {
-            (
-                name.clone(),
-                Func {
-                    args,
-                    body,
-                    name,
-                    span,
+) -> impl Parser<FileExpr, HashMap<String, Func>, Error = Simple<FileExpr>> + Clone {
+    fn try_get_list_symbol_symbol_rest(
+        (form, form_span): &Spanned<FormExpr>,
+    ) -> Option<((String, Span), (String, Span), Span)> {
+        match &form {
+            FormExpr::Literal(_) => None,
+            FormExpr::List(sle) => match &**sle {
+                (ListExpr((list_forms, list_forms_span)), _list_expr_span) => match list_forms {
+                    FormsExpr(vec_form_expr) => match &vec_form_expr[..] {
+                        [(FormExpr::Literal(defn_form_expr), defn_span), (FormExpr::Literal(name_form_expr), name_span), ..] =>
+                        {
+                            match (&**defn_form_expr, &**name_form_expr) {
+                                // Starts with two symbols, e.g. (defn foo [x] (inc x)
+                                (
+                                    (LiteralExpr::Symbol(defn), _),
+                                    (LiteralExpr::Symbol(name), _),
+                                ) => Some((
+                                    (defn.clone(), defn_span.clone()),
+                                    (name.clone(), name_span.clone()),
+                                    form_span.clone(),
+                                )),
+                                _ => None,
+                            }
+                        }
+                        _ => None,
+                    },
+                    _ => None,
                 },
-            )
-        })
-        .labelled("function");
+                _ => None,
+            },
+            FormExpr::Vector(_) => None,
+            FormExpr::Map(_) => None,
+            _ => None,
+        }
+    }
 
-    func.repeated()
-        .try_map(|fs, _| {
-            let mut funcs = HashMap::new();
-            for ((name, name_span), f) in fs {
-                if funcs.insert(name.clone(), f).is_some() {
-                    return Err(Simple::custom(
-                        name_span,
-                        format!("Function '{}' already exists", name),
-                    ));
-                }
-            }
-            Ok(funcs)
-        })
-        .then_ignore(end())
-        */
+    any::<_, Simple<FileExpr>>().then_ignore(end()).map(|x| {
+        let FileExpr::Forms(top_level_forms) = x;
+        let lists_with_two_symbol_heads = top_level_forms
+            .iter()
+            .filter_map(|x| try_get_list_symbol_symbol_rest(x));
+        let defns = lists_with_two_symbol_heads
+            .filter(|((s1, s1_span), (name, name_span), form_span)| s1 == "defn");
+        let mut funcs = HashMap::<String, Func>::new();
+        for ((s1, s1_span), (name, name_span), form_span) in defns {
+            let func = Func {
+                args: vec![],
+                body: (Expr::Error, form_span.clone()),
+                name: (name.to_string(), name_span.clone()),
+                span: form_span.clone(),
+            };
+            funcs.insert(name.clone(), func);
+        }
+        funcs
+    })
 }
 
 pub fn type_inference(expr: &Spanned<Expr>, symbol_type_table: &mut HashMap<Span, Value>) {
@@ -795,10 +783,10 @@ pub struct ParserResult {
 /// Parse an input to a `ParseResult` with the semantic information for syntax highlighting
 pub fn parse(src: &str) -> ParserResult {
     // First, the lexing
-    let (tokens, errs) = lexer().parse_recovery(src);
+    let (tokens, lexer_errors) = lexer().parse_recovery(src);
 
     log::debug!("Lexer Tokens: {:?}", tokens);
-    log::debug!("Lexer Errors: {:?}", errs);
+    log::debug!("Lexer Errors: {:?}", lexer_errors);
 
     let (ast, tokenize_errors, semantic_tokens) = if let Some(tokens) = tokens {
         // First we collect the semantic tokens for syntax highlighting from the lexer tokens
@@ -852,15 +840,19 @@ pub fn parse(src: &str) -> ParserResult {
 
         let len = src.chars().count();
         // Now parse the lexemes (tokens) into an AST
-        let (ast, parse_errs) =
-            funcs_parser().parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter()));
+        let (file_expr, file_parse_errs) =
+            file_expr_parser().parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter()));
 
-        (ast, parse_errs, semantic_tokens)
+        // Then, extract the function definitions
+        let (functions_by_name, parse_errs) =
+            funcs_parser().parse_recovery(file_expr.map_or(vec![], |fe| vec![fe]));
+
+        (functions_by_name, file_parse_errs, semantic_tokens)
     } else {
         (None, Vec::new(), vec![])
     };
 
-    let parse_errors = errs
+    let parse_errors = lexer_errors
         .into_iter()
         .map(|e| e.map(|c| c.to_string()))
         .chain(
@@ -1302,5 +1294,95 @@ mod tests {
         }
     }
 
+    mod parse_integration {
+        use super::*;
 
+        #[test]
+        fn can_parse_ns_form() {
+            let source = "(ns foo.bar)";
+
+            let actual = parse(source);
+            let ParserResult {
+                ast,
+                parse_errors,
+                semantic_tokens,
+            } = actual;
+
+            assert_eq!(
+                (1, 2),
+                (semantic_tokens[0].start, semantic_tokens[0].length)
+            ); // ns
+            assert_eq!(
+                (4, 7),
+                (semantic_tokens[1].start, semantic_tokens[1].length)
+            ); // foo.bar
+
+            assert_eq!(parse_errors, vec![]);
+
+            println!("{:?}", ast);
+            assert!(ast.is_some());
+            assert!(ast.unwrap().is_empty());
+        }
+
+        #[test]
+        fn can_parse_ns_form_with_defns() {
+            let source = r#"(ns foo.bar)
+                   (defn f [x] (inc x))
+                   (defn g [x] (f (f x)))
+                "#;
+
+            println!("{}", source.find(" f ").unwrap());
+
+            let actual = parse(source);
+            let ParserResult {
+                ast,
+                parse_errors,
+                semantic_tokens,
+            } = actual;
+
+            assert_eq!(
+                (1, 2),
+                (semantic_tokens[0].start, semantic_tokens[0].length)
+            ); // ns
+            assert_eq!(
+                (4, 7),
+                (semantic_tokens[1].start, semantic_tokens[1].length)
+            ); // foo.bar
+
+            assert_eq!(parse_errors, vec![]);
+
+            println!("{:?}", ast);
+            assert!(ast.is_some());
+
+            let funcs = ast.unwrap();
+
+            // Check defn of f
+            let actual_f = funcs.get("f").unwrap();
+            let Func {
+                args,
+                body,
+                name,
+                span,
+            } = actual_f;
+            assert_eq!(Spanned::new(String::from("f"), 38..39), *name);
+            assert_eq!(32..52, *span);
+            assert_eq!("f", &source[name.1.clone()]);
+            assert_eq!("(defn f [x] (inc x))", &source[span.clone()]);
+            // TODO: test body
+
+            // Check defn of g
+            let actual_f = funcs.get("g").unwrap();
+            let Func {
+                args,
+                body,
+                name,
+                span,
+            } = actual_f;
+            assert_eq!(Spanned::new(String::from("g"), 78..79), *name);
+            assert_eq!(72..94, *span);
+            assert_eq!("g", &source[name.1.clone()]);
+            assert_eq!("(defn g [x] (f (f x)))", &source[span.clone()]);
+            // TODO: test body
+        }
+    }
 }
