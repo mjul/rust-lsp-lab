@@ -1444,5 +1444,15 @@ mod tests {
             assert_eq!("(defn g [x] (f (f x)))", &source[span.clone()]);
             // TODO: test body
         }
+
+        #[test]
+        fn can_parse_to_semantic_tokens() {
+            let source = "(ns foo.bar) (def kws [:a :a.b/c ::x ::x.y/z])";
+            let actual = parse(source);
+            assert_eq!(actual.parse_errors, vec![]);
+            println!("Semantics: {:?}", actual.semantic_tokens);
+            assert!(!actual.semantic_tokens.is_empty());
+            // TODO: check semantic tokens
+        }
     }
 }
