@@ -471,22 +471,28 @@ fn literal_expr_parser() -> impl Parser<LexerToken, Spanned<LiteralExpr>, Error 
         .at_most(2)
         .then(filter(|t| match t {
             LexerToken::Symbol(_) => true,
+            LexerToken::NsSymbol(_, _) => true,
             _ => false,
         }))
-        .map_with_span(|(colons, symbol), span| match symbol {
-            LexerToken::Symbol(s) => Spanned::new(
-                match colons.len() {
-                    1 => LiteralExpr::Keyword(KeywordLiteral::SimpleKeyword(
-                        SymbolLiteral::SimpleSymbol(s),
-                    )),
-                    2 => LiteralExpr::Keyword(KeywordLiteral::MacroKeyword(
-                        SymbolLiteral::SimpleSymbol(s),
-                    )),
+        .map_with_span(|(colons, symbol), span| {
+            Spanned::new(
+                match (colons.len(), symbol) {
+                    (1, LexerToken::Symbol(s)) => LiteralExpr::Keyword(
+                        KeywordLiteral::SimpleKeyword(SymbolLiteral::SimpleSymbol(s)),
+                    ),
+                    (1, LexerToken::NsSymbol(n, s)) => LiteralExpr::Keyword(
+                        KeywordLiteral::SimpleKeyword(SymbolLiteral::NsSymbol(n, s)),
+                    ),
+                    (2, LexerToken::Symbol(s)) => LiteralExpr::Keyword(
+                        KeywordLiteral::MacroKeyword(SymbolLiteral::SimpleSymbol(s)),
+                    ),
+                    (2, LexerToken::NsSymbol(n, s)) => LiteralExpr::Keyword(
+                        KeywordLiteral::MacroKeyword(SymbolLiteral::NsSymbol(n, s)),
+                    ),
                     _ => unreachable!(),
                 },
                 span,
-            ),
-            _ => unreachable!(),
+            )
         });
 
     let simple_literal = none_of::<LexerToken, _, _>(vec![
@@ -1037,6 +1043,8 @@ mod tests {
                 #[test]
                 fn $tc_name() {
                     let (t, errors) = literal_expr_parser().parse_recovery($input);
+                    let empty_errors: Vec<Simple<LexerToken>> = vec![];
+                    assert_eq!(empty_errors, errors);
                     assert!(t.is_some());
                     let (expr, _span) = t.unwrap();
                     assert_eq!($expected, expr);
@@ -1084,7 +1092,7 @@ mod tests {
             LiteralExpr::Symbol(String::from("a.b/foo"))
         );
         can_parse!(
-            keyword_simple,
+            keyword_simple_with_simple_symbol,
             [
                 LexerToken::Colon,
                 LexerToken::Symbol(SymbolToken::Name(String::from("foo")))
@@ -1094,7 +1102,21 @@ mod tests {
             )))
         );
         can_parse!(
-            keyword_macro_keyword,
+            keyword_simple_with_ns_symbol,
+            [
+                LexerToken::Colon,
+                LexerToken::NsSymbol(
+                    NameToken(String::from("foo.bar")),
+                    SymbolToken::Name(String::from("baz"))
+                )
+            ],
+            LiteralExpr::Keyword(KeywordLiteral::SimpleKeyword(SymbolLiteral::NsSymbol(
+                NameToken(String::from("foo.bar")),
+                SymbolToken::Name(String::from("baz"))
+            )))
+        );
+        can_parse!(
+            keyword_macro_keyword_with_simple_symbol,
             [
                 LexerToken::Colon,
                 LexerToken::Colon,
@@ -1102,6 +1124,21 @@ mod tests {
             ],
             LiteralExpr::Keyword(KeywordLiteral::MacroKeyword(SymbolLiteral::SimpleSymbol(
                 SymbolToken::Name(String::from("foo"))
+            )))
+        );
+        can_parse!(
+            keyword_macro_keyword_with_ns_symbol,
+            [
+                LexerToken::Colon,
+                LexerToken::Colon,
+                LexerToken::NsSymbol(
+                    NameToken(String::from("foo.bar")),
+                    SymbolToken::Name(String::from("baz"))
+                ),
+            ],
+            LiteralExpr::Keyword(KeywordLiteral::MacroKeyword(SymbolLiteral::NsSymbol(
+                NameToken(String::from("foo.bar")),
+                SymbolToken::Name(String::from("baz"))
             )))
         );
     }
