@@ -353,6 +353,25 @@ pub enum FormExpr {
     // ReaderMacro(ReaderMacroExpr)
 }
 
+impl FormExpr {
+    /// Is this a literal expression?
+    pub fn is_literal(&self) -> bool {
+        matches!(self, Self::Literal(..))
+    }
+    /// Is this a list expression?
+    pub fn is_list(&self) -> bool {
+        matches!(self, Self::List(..))
+    }
+    /// Is this a vector expression?
+    pub fn is_vector(&self) -> bool {
+        matches!(self, Self::Vector(..))
+    }
+    /// Is this a map expression?
+    pub fn is_map(&self) -> bool {
+        matches!(self, Self::Map(..))
+    }
+}
+
 /// AST expression for a sequence of forms (`FormExpr`).
 /// ```EBNF
 ///   form = forms* ;
