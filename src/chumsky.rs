@@ -254,30 +254,6 @@ fn lexer() -> impl Parser<char, Vec<(LexerToken, Span)>, Error = Simple<char>> {
         .map(|((n, _slash), symbol)| LexerToken::NsSymbol(n, symbol))
         .labelled("ns_symbol");
 
-    /*
-            let simple_keyword_ = just(':')
-                .ignore_then(symbol_)
-                .collect::<String>()
-                .map(KeywordLiteral::SimpleKeyword);
-
-            let ns_keyword_ = just(':')
-                .ignore_then(symbol_)
-                .then(just('/'))
-                .ignore_then(symbol_)
-                .collect::<String>()
-                .map(_ => KeywordLiteral::MacroKeyword("x", ))
-    */
-
-    // A parser for keywords
-    /*
-        let keyword_ = just(':')
-            .then(just(':'))
-            .ignore_then(filter(|c| *c != '"').repeated())
-            .then_ignore(just('"'))
-            .collect::<String>()
-            .map(Literal::Number);
-    */
-
     let lpar = just::<_, _, Simple<char>>('(').to(LexerToken::LPar);
     let rpar = just::<_, _, Simple<char>>(')').to(LexerToken::RPar);
     let lbra = just::<_, _, Simple<char>>('[').to(LexerToken::LBra);
