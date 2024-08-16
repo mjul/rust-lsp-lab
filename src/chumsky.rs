@@ -341,7 +341,7 @@ pub enum FormExpr {
     Literal(Box<Spanned<LiteralExpr>>),
     List(Box<Spanned<ListExpr>>),
     Vector(Box<Spanned<VectorExpr>>),
-    Map(Box<Spanned<ListExpr>>),
+    Map(Box<Spanned<MapExpr>>),
     // TODO: set
     // No reader macros
     // ReaderMacro(ReaderMacroExpr)
@@ -392,7 +392,7 @@ pub struct VectorExpr(Spanned<FormsExpr>);
 ///   map : '{' (form form)* '}' ;
 /// ```
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
-pub struct MapExpr(Spanned<FormsExpr>);
+pub struct MapExpr(Vec<(Spanned<FormExpr>, Spanned<FormExpr>)>);
 
 // TODO: remove this (legacy)
 // An expression node in the AST. Children are spanned so we can generate useful runtime errors.
@@ -515,6 +515,7 @@ fn literal_expr_parser() -> impl Parser<LexerToken, Spanned<LiteralExpr>, Error 
 fn form_expr_parser() -> impl Parser<LexerToken, Spanned<FormExpr>, Error = Simple<LexerToken>> {
     recursive(|form_expr_parser| {
         let forms = form_expr_parser
+            .clone()
             .repeated()
             .map_with_span(|forms, span| (FormsExpr(Box::new(forms)), span))
             .labelled("forms");
@@ -532,6 +533,7 @@ fn form_expr_parser() -> impl Parser<LexerToken, Spanned<FormExpr>, Error = Simp
             .clone()
             .delimited_by::<_, _, _, _>(just(LexerToken::LPar), just(LexerToken::RPar))
             .map_with_span(|forms_expr, span: Span| {
+                // TODO: fix the span to include the parens
                 Spanned::new(
                     FormExpr::List(Box::new(Spanned::new(ListExpr(forms_expr), span.clone()))),
                     span.clone(),
@@ -542,6 +544,7 @@ fn form_expr_parser() -> impl Parser<LexerToken, Spanned<FormExpr>, Error = Simp
         let vector = forms
             .delimited_by::<_, _, _, _>(just(LexerToken::LBra), just(LexerToken::RBra))
             .map_with_span(|forms_expr, span: Span| {
+                // TODO: fix the span to include the brackets
                 Spanned::new(
                     FormExpr::Vector(Box::new(Spanned::new(VectorExpr(forms_expr), span.clone()))),
                     span.clone(),
@@ -549,8 +552,23 @@ fn form_expr_parser() -> impl Parser<LexerToken, Spanned<FormExpr>, Error = Simp
             })
             .labelled("vector");
 
-        // TODO: add map etc.
-        choice((literal, list, vector)).labelled("form")
+        let map = form_expr_parser
+            .clone()
+            .labelled("key")
+            .then(form_expr_parser.clone().labelled("value"))
+            .repeated()
+            .delimited_by::<_, _, _, _>(just(LexerToken::LCurl), just(LexerToken::RCurl))
+            .map_with_span::<_, _>(|kw_pairs, span: Span| {
+                // TODO: fix the span to include the curly brackets
+                Spanned::new(
+                    FormExpr::Map(Box::new(Spanned::new(MapExpr(kw_pairs), span.clone()))),
+                    span.clone(),
+                )
+            })
+            .labelled("map");
+
+        // TODO: add set etc.
+        choice((literal, list, vector, map)).labelled("form")
     })
 }
 
@@ -1268,6 +1286,82 @@ mod tests {
                             (LiteralExpr::Number(s), _span) => s == "1",
                             _ => false,
                         },
+                        _ => false,
+                    },
+                    _ => false,
+                },
+                _ => false,
+            }
+        );
+
+        can_parse!(
+            map_flat_empty,
+            [LexerToken::LCurl, LexerToken::RCurl,],
+            |t| match t {
+                FormExpr::Map(expr) => match *expr {
+                    (MapExpr(key_val_pairs), _span) => key_val_pairs.is_empty(),
+                    _ => false,
+                },
+                _ => false,
+            }
+        );
+
+        can_parse!(
+            map_flat_single_key_val,
+            [
+                LexerToken::LCurl,
+                LexerToken::Colon,
+                LexerToken::Symbol(SymbolToken::Name(String::from("number"))),
+                LexerToken::Long(42),
+                LexerToken::RCurl,
+            ],
+            |t| match t {
+                FormExpr::Map(me) => match *me {
+                    (MapExpr(pairs), _) => match &(*pairs)[..] {
+                        [((FormExpr::Literal(key), _), (FormExpr::Literal(val), _))] =>
+                            match &(*key.clone(), *val.clone()) {
+                                (
+                                    (
+                                        LiteralExpr::Keyword(KeywordLiteral::SimpleKeyword(
+                                            SymbolLiteral::SimpleSymbol(SymbolToken::Name(key)),
+                                        )),
+                                        _,
+                                    ),
+                                    (LiteralExpr::Number(num), _),
+                                ) => key == "number" && num == "42",
+                                _ => false,
+                            },
+                        _ => false,
+                    },
+                    _ => false,
+                },
+                _ => false,
+            }
+        );
+
+        can_parse!(
+            map_flat_multiple_key_val,
+            [
+                LexerToken::LCurl,
+                LexerToken::String(String::from("a")),
+                LexerToken::Long(1),
+                LexerToken::String(String::from("b")),
+                LexerToken::Long(2),
+                LexerToken::RCurl,
+            ],
+            |t| match t {
+                FormExpr::Map(me) => match *me {
+                    (MapExpr(pairs), _) => match &(*pairs)[..] {
+                        [((FormExpr::Literal(key1), _), (FormExpr::Literal(val1), _)), ((FormExpr::Literal(key2), _), (FormExpr::Literal(val2), _))] =>
+                            match &(*key1.clone(), *val1.clone(), *key2.clone(), *val2.clone()) {
+                                (
+                                    (LiteralExpr::Str(k1), _),
+                                    (LiteralExpr::Number(v1), _),
+                                    (LiteralExpr::Str(k2), _),
+                                    (LiteralExpr::Number(v2), _),
+                                ) => k1 == "a" && v1 == "1" && k2 == "b" && v2 == "2",
+                                _ => false,
+                            },
                         _ => false,
                     },
                     _ => false,
