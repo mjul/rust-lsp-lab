@@ -1,3 +1,48 @@
+# Rust LSP Lab: a Clojure Language Server in Rust using Tower-LSP 
+This project demonstrates a small language server for a Clojure-like language.
+
+It consists of a simple TypeScript extension for VS Code that acts as a client to the language server.
+The server is built in Rust. It uses Tower for the scaffolding. 
+
+See instructions below for how to build and run the project in VS Code.
+
+# Implementation Notes
+The language is defined in [src/chumsky.rs](/src/chumsky.rs) using the (Chumsky)[https://github.com/zesterer/chumsky] 
+parser combinator library. It is a simplified Clojure syntax.
+
+## Notes on using Chumsky
+While parser combinators are generally easy to work with they can be quite frustrating to write and debug since 
+they allow ambiguities that tools like Lexx and Yacc or Antlr would identify. 
+Chumsky has quite good documentation.
+
+## Notes on the LSP structure
+The LSP is an extensive protocol.
+
+At its core, it parses a source document in a traditional two-phased approach:
+
+First, the lexer [`chumsky::lexer()`](src/chumsky.rs) extracts the semantically interesting tokens. 
+Note that these are not just what would be needed for a compiler, but also tokens that are interesting to the client
+application (e.g. the VS Code editor). Similar to the .NET Roslyn compilers you keep tokens and their spans, 
+the position range in the source file, so that the lexer tokens and the AST can be linked back to the source code.
+
+In the second phase, the  [`chumsky::parser()`](src/chumsky.rs) extracts an AST from the token stream from the lexer
+and computes the various views of the source AST that are needed, e.g. the syntax highlight information, 
+information about defined functions and variables for completion and code navigation etc.
+
+### semantic_token_full
+This operation sends the "semantic" token information to VS Code which is then used for semantic syntax highlighting 
+(see https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide). 
+The information is passed in `ImCompleteSemanticToken`.
+
+## Other Thoughts
+For the next lab, start with the official VS Code Extension code.
+
+# References
+This project was based on this project https://github.com/IWANABETHATGUY/tower-lsp-boilerplate
+It looks like the Nano Rust language defined in this project is just an example from the Chumsky project.
+
+The following is the README from this Tower-LSP-boilerplate project:
+
 # boilerplate for a  rust language server powered by `tower-lsp` 
 ## Introduction
 This repo is a template for `tower-lsp`, a useful github project template which makes writing new language servers easier.
