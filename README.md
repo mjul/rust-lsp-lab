@@ -7,27 +7,32 @@ The server is built in Rust. It uses Tower for the scaffolding.
 See instructions below for how to build and run the project in VS Code.
 
 # Implementation Notes
-The language is defined in [src/chumsky.rs](/src/chumsky.rs) using the (Chumsky)[https://github.com/zesterer/chumsky] 
-parser combinator library. It is a simplified Clojure syntax.
 
-## Notes on using Chumsky
+## The Source Code Lexer and Parser
+The language is a simplified Clojure syntax defined in [src/chumsky.rs](/src/chumsky.rs) using the 
+(Chumsky)[https://github.com/zesterer/chumsky] parser combinator library. 
+
+At its core, the server parses a source document in a traditional two-phased approach:
+
+First, the lexer [`chumsky::lexer()`](src/chumsky.rs) extracts the semantically interesting tokens.
+Note that these are not just what would be needed for a compiler, but also tokens that are interesting to the client
+application (e.g. the VS Code editor). Similar to the .NET Roslyn compilers you keep tokens and their spans,
+the position range in the source file, so that the lexer tokens and the AST can be linked back to the source code.
+
+In the second phase, the [`chumsky::parser()`](src/chumsky.rs) extracts an AST from the token stream from the lexer
+and computes the various views of the source AST that are needed, e.g. the syntax highlight information,
+information about defined functions and variables for completion and code navigation etc.
+
+### Notes on using Chumsky
 While parser combinators are generally easy to work with they can be quite frustrating to write and debug since 
 they allow ambiguities that tools like Lexx and Yacc or Antlr would identify. 
 Chumsky has quite good documentation.
 
-## Notes on the LSP structure
-The LSP is an extensive protocol.
+## Notes on the LSP Server
+See (main.rs)[src/main.rs] for the top-level server structure.
 
-At its core, it parses a source document in a traditional two-phased approach:
-
-First, the lexer [`chumsky::lexer()`](src/chumsky.rs) extracts the semantically interesting tokens. 
-Note that these are not just what would be needed for a compiler, but also tokens that are interesting to the client
-application (e.g. the VS Code editor). Similar to the .NET Roslyn compilers you keep tokens and their spans, 
-the position range in the source file, so that the lexer tokens and the AST can be linked back to the source code.
-
-In the second phase, the  [`chumsky::parser()`](src/chumsky.rs) extracts an AST from the token stream from the lexer
-and computes the various views of the source AST that are needed, e.g. the syntax highlight information, 
-information about defined functions and variables for completion and code navigation etc.
+The LSP is an extensive protocol. Initially the server declares its capabilities (a subset of the full protocol), 
+see `main::initialize`. In the same file you find the high-level protocols function entry-points for these capabilities.
 
 ### semantic_token_full
 This operation sends the "semantic" token information to VS Code which is then used for semantic syntax highlighting 
