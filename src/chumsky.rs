@@ -314,17 +314,6 @@ impl std::fmt::Display for Value {
     }
 }
 
-#[deprecated]
-#[derive(Clone, Debug)]
-pub enum BinaryOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Eq,
-    NotEq,
-}
-
 pub type Spanned<T> = (T, Span);
 
 /// The top-most AST expression, representing a complete source file, a sequence of `FormExpr`.
