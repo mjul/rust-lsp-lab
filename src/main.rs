@@ -278,6 +278,12 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
+    /// Inlay Hint Request.
+    /// The inlay hints request is sent from the client to the server to compute inlay hints for a
+    /// given `[text document, range]` tuple that may be rendered in the editor in place with other text.
+    ///
+    /// Inlay hints provide additional information about source code that is rendered inline.
+    /// This is usually used to show inferred types.
     async fn inlay_hint(
         &self,
         params: tower_lsp::lsp_types::InlayHintParams,
