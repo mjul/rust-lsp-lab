@@ -40,7 +40,9 @@ This operation sends the "semantic" token information to VS Code which is then u
 The information is passed in `ImCompleteSemanticToken`.
 
 ## Other Thoughts
-For the next lab, start with the official VS Code Extension code.
+For the next lab, start with the official VS Code Extension code. `tower-lsp-boilerplate` is good for
+inspiration but also has a lot of noise when developing new languages. The underlying Rust library, `tower-lsp`, may 
+still be useful for quickly building the server.
 
 # References
 This project was based on this project https://github.com/IWANABETHATGUY/tower-lsp-boilerplate
