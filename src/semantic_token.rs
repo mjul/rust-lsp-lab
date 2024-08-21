@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use tower_lsp::lsp_types::{SemanticTokenType};
 
-use crate::chumsky::{Expr, Func, ImCompleteSemanticToken, Spanned};
+use crate::chumsky::{Expr, FormExpr, FormsExpr, Func, ImCompleteSemanticToken, Spanned};
 
 pub const LEGEND_TYPE: &[SemanticTokenType] = &[
     SemanticTokenType::FUNCTION,
@@ -45,9 +45,10 @@ pub fn semantic_token_from_ast(ast: &HashMap<String, Func>) -> Vec<ImCompleteSem
 }
 
 pub fn semantic_token_from_expr(
-    expr: &Spanned<Expr>,
+    expr: &Spanned<FormsExpr>,
     semantic_tokens: &mut Vec<ImCompleteSemanticToken>,
 ) {
+    /*
     match &expr.0 {
         Expr::Error => {}
         Expr::Value(_) => {}
@@ -62,5 +63,6 @@ pub fn semantic_token_from_expr(
                     .unwrap(),
             });
         }
-    }
+    }*/
+    // TODO: implement this
 }

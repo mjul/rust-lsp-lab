@@ -4,7 +4,7 @@ use chumsky::Span;
 use im_rc::Vector;
 
 
-use crate::chumsky::{Expr, Func, Spanned};
+use crate::chumsky::{FormExpr, FormsExpr, Func, ListExpr, Spanned};
 #[derive(Debug, Clone)]
 pub enum ReferenceSymbol {
     Founded(Spanned<String>),
@@ -61,12 +61,14 @@ pub fn get_reference(
 }
 
 pub fn get_reference_of_expr(
-    expr: &Spanned<Expr>,
+    expr: &Spanned<FormsExpr>,
     definition_ass_list: Vector<Spanned<String>>,
     reference_symbol: ReferenceSymbol,
     reference_list: &mut Vec<Spanned<String>>,
     include_self: bool,
 ) {
+    // TODO: implement this
+    /*
     match &expr.0 {
         Expr::Error => {}
         Expr::Value(_) => {}
@@ -107,5 +109,39 @@ pub fn get_reference_of_expr(
                 );
             }
         }
+    }*/
+}
+pub fn get_reference_of_form_expr(
+    expr: &Spanned<FormExpr>,
+    definition_ass_list: Vector<Spanned<String>>,
+    reference_symbol: ReferenceSymbol,
+    reference_list: &mut Vec<Spanned<String>>,
+    include_self: bool,
+) {
+    // TODO: implement this
+    /*
+    match &expr.0 {
+        FormExpr::Literal(_) => {}
+        FormExpr::List(ble) => match *ble {
+            (ListExpr((fse, forms_span)), le_span) =>
+                match fse {
+                    FormsExpr(bfms) =>
+                        {
+                            for spanned_fe in *bfms {
+                                get_reference_of_expr(
+                                    &spanned_fe,
+                                    definition_ass_list.clone(),
+                                    reference_symbol.clone(),
+                                    reference_list,
+                                    include_self,
+                                );
+                            }
+                        }
+                    _ => {}
+                },
+        },
+        FormExpr::Vector(_) => {}
+        FormExpr::Map(_) => {}
     }
+    */
 }

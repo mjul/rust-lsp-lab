@@ -430,7 +430,7 @@ impl Expr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Func {
     pub args: Vec<Spanned<String>>,
-    pub body: Spanned<Expr>,
+    pub body: Spanned<FormsExpr>,
     pub name: Spanned<String>,
     pub span: Span,
 }
@@ -675,36 +675,38 @@ pub fn funcs_parser(
 ) -> impl Parser<FileExpr, HashMap<String, Func>, Error = Simple<FileExpr>> + Clone {
     fn try_get_list_symbol_symbol_rest(
         (form, form_span): &Spanned<FormExpr>,
-    ) -> Option<((String, Span), (String, Span), Span)> {
+    ) -> Option<((String, Span), (String, Span), Vec<Spanned<FormExpr>>, Span)> {
         match &form {
             FormExpr::Literal(_) => None,
             FormExpr::List(sle) => match &**sle {
-                (ListExpr((list_forms, list_forms_span)), _list_expr_span) => match list_forms {
+                (ListExpr((list_forms, _list_forms_span)), _list_expr_span) => match list_forms {
                     FormsExpr(vec_form_expr) => match &vec_form_expr[..] {
-                        [(FormExpr::Literal(defn_form_expr), defn_span), (FormExpr::Literal(name_form_expr), name_span), ..] =>
+                        [(FormExpr::Literal(defn_form_expr), defn_span), (FormExpr::Literal(name_form_expr), name_span), rest @ ..] =>
                         {
                             match (&**defn_form_expr, &**name_form_expr) {
                                 // Starts with two symbols, e.g. (defn foo [x] (inc x)
                                 (
                                     (LiteralExpr::Symbol(defn), _),
                                     (LiteralExpr::Symbol(name), _),
-                                ) => Some((
-                                    (defn.clone(), defn_span.clone()),
-                                    (name.clone(), name_span.clone()),
-                                    form_span.clone(),
-                                )),
+                                ) => {
+                                    // everything in the list except the two initial symbols for defn and the name
+                                    let rest_forms = rest.into_iter().map(|x| x.clone()).collect();
+                                    Some((
+                                        (defn.clone(), defn_span.clone()),
+                                        (name.clone(), name_span.clone()),
+                                        rest_forms,
+                                        form_span.clone(),
+                                    ))
+                                }
                                 _ => None,
                             }
                         }
                         _ => None,
                     },
-                    _ => None,
                 },
-                _ => None,
             },
             FormExpr::Vector(_) => None,
             FormExpr::Map(_) => None,
-            _ => None,
         }
     }
 
@@ -714,12 +716,32 @@ pub fn funcs_parser(
             .iter()
             .filter_map(|x| try_get_list_symbol_symbol_rest(x));
         let defns = lists_with_two_symbol_heads
-            .filter(|((s1, s1_span), (name, name_span), form_span)| s1 == "defn");
+            .filter(|((s1, s1_span), (name, name_span), _rest_forms, _form_span)| s1 == "defn");
         let mut funcs = HashMap::<String, Func>::new();
-        for ((s1, s1_span), (name, name_span), form_span) in defns {
+        for ((s1, s1_span), (name, name_span), rest_forms, form_span) in defns {
+            let mut inner = rest_forms.into_iter().peekable();
+            match inner.peek() {
+                Some((FormExpr::Literal(le), _span)) => match &**le {
+                    (LiteralExpr::Str(_doc_comment), _span) => {
+                        inner.next();
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+            match inner.peek() {
+                Some((FormExpr::Vector(_args), _span)) => {
+                    inner.next();
+                }
+                _ => {}
+            }
+            let body_forms: Vec<Spanned<FormExpr>> = inner.collect();
+            let body_span_start = body_forms.first().map_or(form_span.end, |x| x.1.start);
+            let body_span_end = body_forms.last().map_or(form_span.end, |x| x.1.end);
+            let body_span = body_span_start..body_span_end;
             let func = Func {
                 args: vec![],
-                body: (Expr::Error, form_span.clone()),
+                body: (FormsExpr(Box::new(body_forms)), body_span),
                 name: (name.to_string(), name_span.clone()),
                 span: form_span.clone(),
             };
@@ -729,15 +751,16 @@ pub fn funcs_parser(
     })
 }
 
-pub fn type_inference(expr: &Spanned<Expr>, symbol_type_table: &mut HashMap<Span, Value>) {
-    match &expr.0 {
+pub fn type_inference(expr: &Spanned<FormsExpr>, symbol_type_table: &mut HashMap<Span, Value>) {
+    /*match &expr.0 {
         Expr::Error => {}
         Expr::Value(_) => {}
         Expr::List(exprs) => exprs
             .iter()
             .for_each(|expr| type_inference(expr, symbol_type_table)),
         Expr::Local(_) => {}
-    }
+    }*/
+    // TODO: implement this
 }
 
 #[derive(Debug)]

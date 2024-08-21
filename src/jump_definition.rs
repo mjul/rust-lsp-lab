@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use im_rc::Vector;
 
-use crate::chumsky::{Expr, Func, Spanned};
+use crate::chumsky::{Expr, FormsExpr, Func, Spanned};
 /// return (need_to_continue_search, founded reference)
 pub fn get_definition(ast: &HashMap<String, Func>, ident_offset: usize) -> Option<Spanned<String>> {
     let mut vector = Vector::new();
@@ -27,16 +27,17 @@ pub fn get_definition(ast: &HashMap<String, Func>, ident_offset: usize) -> Optio
 }
 
 pub fn get_definition_of_expr(
-    expr: &Spanned<Expr>,
+    expr: &Spanned<FormsExpr>,
     definition_ass_list: Vector<Spanned<String>>,
     ident_offset: usize,
 ) -> (bool, Option<Spanned<String>>) {
+    /*
     match &expr.0 {
         Expr::Error => (true, None),
         Expr::Value(_) => (true, None),
-        // Expr::List(exprs) => exprs
-        //     .iter()
-        //     .for_each(|expr| get_definition(expr, definition_ass_list)),
+        Expr::List(exprs) => exprs
+            .iter()
+            .for_each(|expr| get_definition(expr, definition_ass_list)),
         Expr::Local(local) => {
             if ident_offset >= local.1.start && ident_offset < local.1.end {
                 let index = definition_ass_list
@@ -49,7 +50,7 @@ pub fn get_definition_of_expr(
             } else {
                 (true, None)
             }
-        },
+        }
         Expr::List(lst) => {
             for expr in lst {
                 match get_definition_of_expr(expr, definition_ass_list.clone(), ident_offset) {
@@ -61,5 +62,7 @@ pub fn get_definition_of_expr(
             }
             (true, None)
         }
-    }
+    }*/
+    // TODO: implement this
+    (true, None)
 }
