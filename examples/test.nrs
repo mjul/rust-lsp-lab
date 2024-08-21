@@ -20,3 +20,6 @@
                                   :spring :en.terminology.seasons/spring
                                   :summer :en.terminology.seasons/summer
                                   :autumn "Fall"}}}})
+
+(defn f "Increment x" [x] (inc x))
+(defn g [x] (f (f x)))
