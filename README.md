@@ -10,7 +10,7 @@ See instructions below for how to build and run the project in VS Code.
 
 ## The Source Code Lexer and Parser
 The language is a simplified Clojure syntax defined in [src/chumsky.rs](/src/chumsky.rs) using the 
-(Chumsky)[https://github.com/zesterer/chumsky] parser combinator library. 
+[Chumsky](https://github.com/zesterer/chumsky) parser combinator library. 
 
 At its core, the server parses a source document in a traditional two-phased approach:
 
