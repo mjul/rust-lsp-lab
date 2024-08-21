@@ -751,16 +751,33 @@ pub fn funcs_parser(
     })
 }
 
-pub fn type_inference(expr: &Spanned<FormsExpr>, symbol_type_table: &mut HashMap<Span, Value>) {
-    /*match &expr.0 {
-        Expr::Error => {}
-        Expr::Value(_) => {}
-        Expr::List(exprs) => exprs
+/// Try to infer the type of a `FormsExpr`.
+/// Adds the spans and their types to the `symbol_type_table`.
+pub fn type_inference(
+    expr: &Spanned<FormsExpr>,
+    symbol_type_table: &mut HashMap<Span, LiteralExpr>,
+) {
+    match &expr.0 {
+        FormsExpr(bfs) => bfs
             .iter()
-            .for_each(|expr| type_inference(expr, symbol_type_table)),
-        Expr::Local(_) => {}
-    }*/
-    // TODO: implement this
+            .for_each(|fe| type_inference_form_expr(fe, symbol_type_table)),
+    }
+}
+
+/// Try to infer the type of a `FormExpr`.
+/// Adds the spans and their types to the `symbol_type_table`.
+fn type_inference_form_expr(
+    expr: &Spanned<FormExpr>,
+    symbol_type_table: &mut HashMap<Span, LiteralExpr>,
+) {
+    match &expr.0 {
+        FormExpr::Literal(ble) => {}
+        FormExpr::List(_) => {
+            // TODO: implement register types for defn, def and let bindings
+        }
+        FormExpr::Vector(_) => {}
+        FormExpr::Map(_) => {}
+    }
 }
 
 #[derive(Debug)]

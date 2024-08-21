@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
 use dashmap::DashMap;
-use nrs_language_server::chumsky::{
-    parse, type_inference, Func, ImCompleteSemanticToken, ParserResult,
-};
+use nrs_language_server::chumsky::{parse, type_inference, Func, ImCompleteSemanticToken, LiteralExpr, ParserResult};
 use nrs_language_server::completion::completion;
 use nrs_language_server::jump_definition::get_definition;
 use nrs_language_server::reference::get_reference;
@@ -310,12 +308,13 @@ impl LanguageServer for Backend {
                     k.start,
                     k.end,
                     match v {
-                        nrs_language_server::chumsky::Value::Null => "null".to_string(),
-                        nrs_language_server::chumsky::Value::Bool(_) => "bool".to_string(),
-                        nrs_language_server::chumsky::Value::Num(_) => "number".to_string(),
-                        nrs_language_server::chumsky::Value::Str(_) => "string".to_string(),
-                        nrs_language_server::chumsky::Value::List(_) => "[]".to_string(),
-                        nrs_language_server::chumsky::Value::Func(_) => v.to_string(),
+                        LiteralExpr::Nil => "nil".to_string(),
+                        LiteralExpr::Bool(_) => "bool".to_string(),
+                        LiteralExpr::Number(_)=> "number".to_string(),
+                        LiteralExpr::Str(_) => "string".to_string(),
+                        LiteralExpr::Symbol(_) => "symbol".to_string(),
+                        LiteralExpr::Keyword(_) => "keyword".to_string(),
+                        LiteralExpr::Character(_) => "char".to_string(),
                     },
                 )
             })
