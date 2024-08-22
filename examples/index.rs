@@ -12,7 +12,7 @@ fn main() {
         parse_errors,
         semantic_tokens: _,
     } = parse(source);
-    println!("{:?}", parse_errors);
+    println!("Parse errors: {:?}", parse_errors);
     // if let Some(ref ast) = ast {
     //     println!("{:#?}", ast);
     // } else {
@@ -25,5 +25,5 @@ fn main() {
             type_inference(&v.body, &mut hashmap);
         });
     }
-    println!("{:?}", hashmap);
+    println!("Type inference: {:?}", hashmap);
 }
