@@ -670,9 +670,97 @@ fn expr_parser() -> impl Parser<LiteralExpr, Spanned<Expr>, Error = Simple<Liter
     })
 }
 
+/// A `defn` declaration
+struct Defn {
+    defn: Spanned<String>,
+    name: Spanned<String>,
+    doc_comment: Option<Spanned<String>>,
+    args: Spanned<String>,
+    body: Spanned<FormsExpr>,
+    span: Span,
+}
+
+/// Parse a `FormExpr` into a `Defn` if it matches the proper `(defn f [] ...)` list form.
+pub fn defn_parser() -> impl Parser<FormExpr, Defn, Error = Simple<FormExpr>> + Clone {
+    filter_map::<_, Defn, _, Simple<FormExpr>>(|form_span, form| {
+        match &form {
+            FormExpr::List(bsle) => {
+                match &**bsle {
+                    (ListExpr((list_forms, _list_forms_span)), list_expr_span) => {
+                        match list_forms {
+                            FormsExpr(vec_form_expr) => match &vec_form_expr[..] {
+                                [(FormExpr::Literal(defn_form_expr), defn_span), (FormExpr::Literal(name_form_expr), name_span), rest @ ..] =>
+                                {
+                                    match (&**defn_form_expr, &**name_form_expr) {
+                                        // Starts with two symbols, e.g. (defn foo [x] (inc x)
+                                        (
+                                            (LiteralExpr::Symbol(defn), defn_span),
+                                            (LiteralExpr::Symbol(name), name_span),
+                                        ) => {
+                                            if "defn" == defn {
+                                                // everything in the list except the two initial symbols for defn and the name
+                                                let rest_forms: Vec<Spanned<FormExpr>> =
+                                                    rest.into_iter().map(|x| x.clone()).collect();
+                                                let rest_forms_span = if rest_forms.is_empty() {
+                                                    _list_forms_span.end.._list_forms_span.end
+                                                } else {
+                                                    let start =
+                                                        rest_forms.first().unwrap().1.start.clone();
+                                                    let end = rest_forms.last().unwrap().1.end;
+                                                    start..end
+                                                };
+                                                // TODO: elaborate this
+                                                Ok(Defn {
+                                                    defn: (defn.clone(), defn_span.clone()),
+                                                    name: (name.clone(), name_span.clone()),
+                                                    doc_comment: None,
+                                                    args: ("".to_string(), Default::default()),
+                                                    body: Spanned::new(
+                                                        FormsExpr(Box::new(rest_forms)),
+                                                        rest_forms_span,
+                                                    ),
+                                                    span: list_expr_span.clone(),
+                                                })
+                                            } else {
+                                                Err(Simple::custom(
+                                                    defn_span.clone(),
+                                                    "Initial symbol is not defn",
+                                                ))
+                                            }
+                                        }
+                                        _ => Err(Simple::custom(
+                                            list_expr_span.clone(),
+                                            "List does not start with two symbols",
+                                        )),
+                                    }
+                                }
+                                _ => Err(Simple::custom(
+                                    list_expr_span.clone(),
+                                    "List does not start with two literals",
+                                )),
+                            },
+                        }
+                    }
+                }
+            }
+            _ => Err(Simple::custom(form_span.clone(), "Form is not a list")),
+        }
+    })
+}
+
+impl TryFrom<Spanned<ListExpr>> for Defn {
+    type Error = ();
+    fn try_from(value: Spanned<ListExpr>) -> Result<Self, Self::Error> {
+        let defn = defn_parser().parse(vec![FormExpr::List(Box::new(value))]);
+        defn.map_err(|e| ())
+    }
+}
+
 /// Parser that extracts the functions
 pub fn funcs_parser(
 ) -> impl Parser<FileExpr, HashMap<String, Func>, Error = Simple<FileExpr>> + Clone {
+    // TODO: simplify using the defn_parser above
+
     fn try_get_list_symbol_symbol_rest(
         (form, form_span): &Spanned<FormExpr>,
     ) -> Option<((String, Span), (String, Span), Vec<Spanned<FormExpr>>, Span)> {
@@ -772,8 +860,16 @@ fn type_inference_form_expr(
 ) {
     match &expr.0 {
         FormExpr::Literal(ble) => {}
-        FormExpr::List(_) => {
-            // TODO: implement register types for defn, def and let bindings
+        FormExpr::List(le) => {
+            // If it is a defn register a type under that symbol name
+            match Defn::try_from(*le.clone()) {
+                Ok(defn) => {
+                    // TODO: fill out the type
+                    symbol_type_table.insert(defn.name.1.clone(), LiteralExpr::Nil);
+                }
+                _ => {}
+            }
+            // TODO: implement for def and let bindings
         }
         FormExpr::Vector(_) => {}
         FormExpr::Map(_) => {}
@@ -1450,6 +1546,55 @@ mod tests {
             assert_eq!(2, forms.len());
             assert!(forms[0].0.is_list());
             assert!(forms[1].0.is_list());
+        }
+    }
+
+    mod defn_parsing {
+        use super::*;
+
+        #[test]
+        fn can_parse_defn_with_no_args_no_comment_single_expr_body() {
+            // (defn f [] nil)
+            let le = Spanned::new(
+                ListExpr((
+                    FormsExpr(Box::new(vec![
+                        Spanned::new(
+                            FormExpr::Literal(Box::new(Spanned::new(
+                                LiteralExpr::Symbol(String::from("defn")),
+                                1..5,
+                            ))),
+                            1..5,
+                        ),
+                        Spanned::new(
+                            FormExpr::Literal(Box::new(Spanned::new(
+                                LiteralExpr::Symbol(String::from("f")),
+                                6..7,
+                            ))),
+                            6..7,
+                        ),
+                        Spanned::new(
+                            FormExpr::Vector(Box::new(Spanned::new(
+                                VectorExpr(Spanned::new(FormsExpr(Box::new(vec![])), 8..10)),
+                                8..10,
+                            ))),
+                            8..10,
+                        ),
+                        Spanned::new(
+                            FormExpr::Literal(Box::new(Spanned::new(LiteralExpr::Nil, 11..14))),
+                            11..14,
+                        ),
+                    ])),
+                    1..14,
+                )),
+                0..15,
+            );
+            let fe = FormExpr::List(Box::new(le));
+            let (actual_defn, actual_errors) = defn_parser().parse_recovery(vec![fe]);
+            assert!(actual_errors.is_empty());
+            let actual = actual_defn.unwrap();
+            assert_eq!((String::from("defn"), 1..5), actual.defn);
+            assert_eq!((String::from("f"), 6..7), actual.name);
+            // TODO: elaborate
         }
     }
 
