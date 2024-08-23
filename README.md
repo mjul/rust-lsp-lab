@@ -1,10 +1,11 @@
 # Rust LSP Lab: a Clojure Language Server in Rust using Tower-LSP 
 This project demonstrates a small language server for a Clojure-like language.
 
-It consists of a simple TypeScript extension for VS Code that acts as a client to the language server.
-The server is built in Rust. It uses Tower for the scaffolding. 
+It consists of a simple TypeScript extension for VS Code that acts as a client to the language server and
+a server is built in Rust. The server uses Tower for the scaffolding (`tokio-lsp`) and Chumsky (`chumsky`) 
+parser combinators for parsing the source code.
 
-See instructions below for how to build and run the project in VS Code.
+See instructions below for how to build and run the project in VS Code.  
 
 # Implementation Notes
 
