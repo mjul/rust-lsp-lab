@@ -748,14 +748,6 @@ pub fn defn_parser() -> impl Parser<FormExpr, Defn, Error = Simple<FormExpr>> + 
     })
 }
 
-impl TryFrom<Spanned<ListExpr>> for Defn {
-    type Error = ();
-    fn try_from(value: Spanned<ListExpr>) -> Result<Self, Self::Error> {
-        let defn = defn_parser().parse(vec![FormExpr::List(Box::new(value))]);
-        defn.map_err(|e| ())
-    }
-}
-
 /// Parser that extracts the functions
 pub fn funcs_parser(
 ) -> impl Parser<FileExpr, HashMap<String, Func>, Error = Simple<FileExpr>> + Clone {
@@ -858,22 +850,16 @@ fn type_inference_form_expr(
     expr: &Spanned<FormExpr>,
     symbol_type_table: &mut HashMap<Span, LiteralExpr>,
 ) {
-    match &expr.0 {
-        FormExpr::Literal(ble) => {}
-        FormExpr::List(le) => {
-            // If it is a defn register a type under that symbol name
-            match Defn::try_from(*le.clone()) {
-                Ok(defn) => {
-                    // TODO: fill out the type
-                    symbol_type_table.insert(defn.name.1.clone(), LiteralExpr::Nil);
-                }
-                _ => {}
-            }
-            // TODO: implement for def and let bindings
+    let (e, _e_span) = expr;
+    let defn_result = defn_parser().parse(vec![e.clone()]);
+    match defn_result {
+        Ok(defn) => {
+            // TODO: fill out the type
+            symbol_type_table.insert(defn.name.1.clone(), LiteralExpr::Nil);
         }
-        FormExpr::Vector(_) => {}
-        FormExpr::Map(_) => {}
+        Err(_) => {}
     }
+    // TODO: implement for def and let bindings
 }
 
 #[derive(Debug)]
