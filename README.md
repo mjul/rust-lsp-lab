@@ -2,8 +2,8 @@
 This project demonstrates a small language server for a Clojure-like language.
 
 It consists of a simple TypeScript extension for VS Code that acts as a client to the language server and
-a server is built in Rust. The server uses Tower for the scaffolding (`tokio-lsp`) and Chumsky (`chumsky`) 
-parser combinators for parsing the source code.
+a server is built in Rust. The server uses (Tokio) Tower and Tokio LSP for the scaffolding (`tower-lsp`) 
+and Chumsky (`chumsky`) parser combinators for parsing the source code.
 
 See instructions below for how to build and run the project in VS Code.  
 
