@@ -326,6 +326,7 @@ pub enum FileExpr {
 }
 
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
+
 pub enum FormExpr {
     Literal(Box<Spanned<LiteralExpr>>),
     List(Box<Spanned<ListExpr>>),
@@ -355,12 +356,23 @@ impl FormExpr {
     }
 }
 
+impl From<Spanned<LiteralExpr>> for FormExpr {
+    fn from(value: Spanned<LiteralExpr>) -> Self {
+        FormExpr::Literal(Box::new(value))
+    }
+}
+
 /// AST expression for a sequence of forms (`FormExpr`).
 /// ```EBNF
 ///   form = forms* ;
 /// ```
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub struct FormsExpr(Box<Vec<Spanned<FormExpr>>>);
+impl From<Vec<Spanned<FormExpr>>> for FormsExpr {
+    fn from(value: Vec<Spanned<FormExpr>>) -> Self {
+        FormsExpr(Box::new(value))
+    }
+}
 
 /// List expression:
 /// ```EBNF
@@ -368,6 +380,12 @@ pub struct FormsExpr(Box<Vec<Spanned<FormExpr>>>);
 /// ```
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub struct ListExpr(Spanned<FormsExpr>);
+
+impl ListExpr {
+    pub(crate) fn new(value: Spanned<FormsExpr>) -> Self {
+        ListExpr(value)
+    }
+}
 
 /// Vector expression:
 /// ```EBNF

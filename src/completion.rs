@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
 use crate::chumsky::{FormsExpr, Func, Spanned};
+
+#[derive(Debug, PartialEq)]
 pub enum ImCompleteCompletionItem {
     Variable(String),
     Function(String, Vec<String>),
@@ -67,4 +69,57 @@ pub fn get_completion_of(
      */
     // TODO: implement this
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::chumsky::{FormExpr, Func, ListExpr, LiteralExpr};
+    use chumsky::chain::Chain;
+    use chumsky::Span;
+
+    #[test]
+    pub fn can_complete_known_symbol() {
+        // (defn foobar [x] (inc x))
+        let body_le = Spanned::new(
+            ListExpr::new(Spanned::new(
+                FormsExpr::from(vec![Spanned::new(
+                    FormExpr::from(Spanned::new(
+                        LiteralExpr::Symbol(String::from("inc")),
+                        18..21,
+                    )),
+                    18..21,
+                )]),
+                18..23,
+            )),
+            17..24,
+        );
+        let body = Spanned::new(
+            FormsExpr::from(vec![Spanned::new(
+                FormExpr::List(Box::new(body_le)),
+                17..24,
+            )]),
+            17..24,
+        );
+        let mut ast = HashMap::new();
+        ast.insert(
+            String::from("foobar"),
+            Func {
+                args: vec![],
+                body,
+                name: ("foobar".to_string(), 6..12),
+                span: 0..23,
+            },
+        );
+        let item =
+            ImCompleteCompletionItem::Function(String::from("fo"), vec![String::from("foobar")]);
+        let actual = completion(&ast, 20);
+        assert_eq!(1, actual.len());
+        assert_eq!(vec!["foobar"], actual.keys().collect::<Vec<_>>());
+        let actual_item: &ImCompleteCompletionItem = actual.get("foobar").unwrap();
+        assert_eq!(
+            &ImCompleteCompletionItem::Function(String::from("foobar"), vec![]),
+            actual_item
+        );
+    }
 }
