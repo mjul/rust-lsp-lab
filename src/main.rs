@@ -379,7 +379,7 @@ impl LanguageServer for Backend {
                             kind: Some(CompletionItemKind::FUNCTION),
                             detail: Some(name.clone()),
                             insert_text: Some(format!(
-                                "{}({})",
+                                "{} {}",
                                 name,
                                 args.iter()
                                     .enumerate()
