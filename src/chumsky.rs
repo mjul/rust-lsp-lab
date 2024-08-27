@@ -591,8 +591,8 @@ fn file_expr_parser() -> impl Parser<LexerToken, FileExpr, Error = Simple<LexerT
 #[deprecated]
 // TODO: change to Expr
 fn expr_parser() -> impl Parser<LiteralExpr, Spanned<Expr>, Error = Simple<LiteralExpr>> + Clone {
-    recursive(|expr| {
-        let raw_expr = recursive(|raw_expr| {
+    recursive(|_expr| {
+        let raw_expr = recursive(|_raw_expr| {
             let val = filter_map(|span, tok| match tok {
                 LiteralExpr::Nil => Ok(Expr::Value(Value::Null)),
                 LiteralExpr::Bool(x) => Ok(Expr::Value(Value::Bool(x))),
@@ -707,7 +707,7 @@ pub fn defn_parser() -> impl Parser<FormExpr, Defn, Error = Simple<FormExpr>> + 
                     (ListExpr((list_forms, _list_forms_span)), list_expr_span) => {
                         match list_forms {
                             FormsExpr(vec_form_expr) => match &vec_form_expr[..] {
-                                [(FormExpr::Literal(defn_form_expr), defn_span), (FormExpr::Literal(name_form_expr), name_span), rest @ ..] =>
+                                [(FormExpr::Literal(defn_form_expr), _defn_span), (FormExpr::Literal(name_form_expr), _name_span), rest @ ..] =>
                                 {
                                     match (&**defn_form_expr, &**name_form_expr) {
                                         // Starts with two symbols, e.g. (defn foo [x] (inc x)
@@ -814,9 +814,9 @@ pub fn funcs_parser(
             .iter()
             .filter_map(|x| try_get_list_symbol_symbol_rest(x));
         let defns = lists_with_two_symbol_heads
-            .filter(|((s1, s1_span), (name, name_span), _rest_forms, _form_span)| s1 == "defn");
+            .filter(|((s1, _s1_span), (_name, _name_span), _rest_forms, _form_span)| s1 == "defn");
         let mut funcs = HashMap::<String, Func>::new();
-        for ((s1, s1_span), (name, name_span), rest_forms, form_span) in defns {
+        for ((_s1, _s1_span), (name, name_span), rest_forms, form_span) in defns {
             let mut inner = rest_forms.into_iter().peekable();
             match inner.peek() {
                 Some((FormExpr::Literal(le), _span)) => match &**le {
@@ -934,7 +934,7 @@ pub fn parse(src: &str) -> ParserResult {
             file_expr_parser().parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter()));
 
         // Then, extract the function definitions
-        let (functions_by_name, parse_errs) =
+        let (functions_by_name, _parse_errs) =
             funcs_parser().parse_recovery(file_expr.map_or(vec![], |fe| vec![fe]));
 
         (functions_by_name, file_parse_errs, semantic_tokens)
@@ -1066,7 +1066,7 @@ mod tests {
             let tokens = actual.unwrap();
             assert_eq!(2, tokens.len());
             match &tokens[..] {
-                [(t1, s1), (t2, s2)] => {
+                [(t1, _s1), (t2, _s2)] => {
                     assert_eq!(&LexerToken::Boolean(true), t1);
                     assert_eq!(&LexerToken::Nil, t2);
                 }
@@ -1116,7 +1116,7 @@ mod tests {
             assert_eq!(true, actual.is_ok());
             let tokens = actual.unwrap();
             assert_eq!(16, tokens.len());
-            let lts: Vec<LexerToken> = tokens.into_iter().map(|(t, s)| t).collect();
+            let lts: Vec<LexerToken> = tokens.into_iter().map(|(t, _s)| t).collect();
             assert_eq!(LexerToken::Nil, lts[0]);
             assert_eq!(LexerToken::Boolean(true), lts[1]);
             assert_eq!(LexerToken::Boolean(false), lts[2]);
@@ -1156,7 +1156,7 @@ mod tests {
             "#;
             let (tokens, errors) = lexer().parse_recovery(source);
             assert_eq!(errors, vec![]);
-            let tokens: Vec<LexerToken> = tokens.unwrap().into_iter().map(|(t, s)| t).collect();
+            let tokens: Vec<LexerToken> = tokens.unwrap().into_iter().map(|(t, _s)| t).collect();
             assert_eq!(
                 vec![
                     LexerToken::Colon,
@@ -1331,7 +1331,7 @@ mod tests {
                     let (t, errors) = form_expr_parser().parse_recovery($input);
                     assert_eq!(errors, vec![]);
                     assert!(t.is_some());
-                    let (expr, span): Spanned<FormExpr> = t.unwrap();
+                    let (expr, _span): Spanned<FormExpr> = t.unwrap();
                     let is_match = $matcher(expr);
                     assert!(is_match);
                 }
@@ -1362,7 +1362,6 @@ mod tests {
                         },
                         _ => false,
                     },
-                    _ => false,
                 },
                 _ => false,
             }
@@ -1387,7 +1386,6 @@ mod tests {
                             },
                         _ => false,
                     },
-                    _ => false,
                 },
                 _ => false,
             }
@@ -1399,7 +1397,6 @@ mod tests {
             |t| match t {
                 FormExpr::Vector(ve) => match *ve {
                     (VectorExpr((FormsExpr(forms), _)), _span) => forms.is_empty(),
-                    _ => false,
                 },
                 _ => false,
             }
@@ -1417,7 +1414,6 @@ mod tests {
                         },
                         _ => false,
                     },
-                    _ => false,
                 },
                 _ => false,
             }
@@ -1429,7 +1425,6 @@ mod tests {
             |t| match t {
                 FormExpr::Map(expr) => match *expr {
                     (MapExpr(key_val_pairs), _span) => key_val_pairs.is_empty(),
-                    _ => false,
                 },
                 _ => false,
             }
@@ -1462,7 +1457,6 @@ mod tests {
                             },
                         _ => false,
                     },
-                    _ => false,
                 },
                 _ => false,
             }
@@ -1493,7 +1487,6 @@ mod tests {
                             },
                         _ => false,
                     },
-                    _ => false,
                 },
                 _ => false,
             }
@@ -1527,7 +1520,7 @@ mod tests {
             ]);
             let FileExpr::Forms(forms) = actual;
             assert_eq!(1, forms.len());
-            let (form, span) = &forms[0];
+            let (form, _span) = &forms[0];
             assert!(form.is_list());
         }
 
