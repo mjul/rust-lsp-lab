@@ -367,7 +367,7 @@ impl From<Spanned<LiteralExpr>> for FormExpr {
 ///   form = forms* ;
 /// ```
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
-pub struct FormsExpr(Box<Vec<Spanned<FormExpr>>>);
+pub struct FormsExpr(pub(crate) Box<Vec<Spanned<FormExpr>>>);
 impl From<Vec<Spanned<FormExpr>>> for FormsExpr {
     fn from(value: Vec<Spanned<FormExpr>>) -> Self {
         FormsExpr(Box::new(value))
@@ -379,7 +379,7 @@ impl From<Vec<Spanned<FormExpr>>> for FormsExpr {
 ///   list : '(' forms ')' ;
 /// ```
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
-pub struct ListExpr(Spanned<FormsExpr>);
+pub struct ListExpr(pub(crate) Spanned<FormsExpr>);
 
 impl ListExpr {
     pub(crate) fn new(value: Spanned<FormsExpr>) -> Self {
@@ -392,14 +392,14 @@ impl ListExpr {
 ///   vector : '[' forms ']' ;
 /// ```
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
-pub struct VectorExpr(Spanned<FormsExpr>);
+pub struct VectorExpr(pub(crate) Spanned<FormsExpr>);
 
 /// Map expression:
 /// ```EBNF
 ///   map : '{' (form form)* '}' ;
 /// ```
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
-pub struct MapExpr(Vec<(Spanned<FormExpr>, Spanned<FormExpr>)>);
+pub struct MapExpr(pub(crate) Vec<(Spanned<FormExpr>, Spanned<FormExpr>)>);
 
 // TODO: remove this (legacy)
 // An expression node in the AST. Children are spanned so we can generate useful runtime errors.

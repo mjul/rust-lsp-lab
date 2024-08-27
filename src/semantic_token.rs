@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
-use tower_lsp::lsp_types::{SemanticTokenType};
+use tower_lsp::lsp_types::SemanticTokenType;
 
-use crate::chumsky::{Expr, FormExpr, FormsExpr, Func, ImCompleteSemanticToken, Spanned};
+use crate::chumsky::{
+    FormExpr, FormsExpr, Func, ImCompleteSemanticToken, ListExpr, MapExpr, Spanned, VectorExpr,
+};
 
 pub const LEGEND_TYPE: &[SemanticTokenType] = &[
     SemanticTokenType::FUNCTION,
@@ -15,6 +17,8 @@ pub const LEGEND_TYPE: &[SemanticTokenType] = &[
     SemanticTokenType::PARAMETER,
 ];
 
+/// Add semantic tokens from the AST.
+/// Note that the parser also emits low-level semantic tokens for e.g. literals.
 pub fn semantic_token_from_ast(ast: &HashMap<String, Func>) -> Vec<ImCompleteSemanticToken> {
     let mut semantic_tokens = vec![];
 
@@ -38,31 +42,52 @@ pub fn semantic_token_from_ast(ast: &HashMap<String, Func>) -> Vec<ImCompleteSem
                 .position(|item| item == &SemanticTokenType::FUNCTION)
                 .unwrap(),
         });
-        semantic_token_from_expr(&function.body, &mut semantic_tokens);
+        semantic_token_from_forms_expr(&function.body, &mut semantic_tokens);
     });
 
     semantic_tokens
 }
 
-pub fn semantic_token_from_expr(
+/// Recursively add semantic tokens from the forms to the `semantic_tokens` list.
+fn semantic_token_from_forms_expr(
     expr: &Spanned<FormsExpr>,
     semantic_tokens: &mut Vec<ImCompleteSemanticToken>,
 ) {
-    /*
     match &expr.0 {
-        Expr::Error => {}
-        Expr::Value(_) => {}
-        Expr::List(_) => {}
-        Expr::Local((_name, span)) => {
-            semantic_tokens.push(ImCompleteSemanticToken {
-                start: span.start,
-                length: span.len(),
-                token_type: LEGEND_TYPE
-                    .iter()
-                    .position(|item| item == &SemanticTokenType::VARIABLE)
-                    .unwrap(),
-            });
+        FormsExpr(bsfes) => {
+            for fex in bsfes.iter() {
+                semantic_token_from_form_expr(&fex, semantic_tokens);
+            }
         }
-    }*/
-    // TODO: implement this
+    }
+}
+
+/// Recursively add semantic tokens from the form expression to the `semantic_tokens` list.
+fn semantic_token_from_form_expr(
+    expr: &Spanned<FormExpr>,
+    semantic_tokens: &mut Vec<ImCompleteSemanticToken>,
+) {
+    match &expr.0 {
+        FormExpr::Literal(bsle) => {
+            // Do nothing, literals are tagged in the parser
+        }
+        FormExpr::List(sles) => match &sles.0 {
+            ListExpr(sfes) => {
+                semantic_token_from_forms_expr(&sfes, semantic_tokens);
+            }
+        },
+        FormExpr::Vector(bsve) => match &bsve.0 {
+            VectorExpr(sfes) => {
+                semantic_token_from_forms_expr(&sfes, semantic_tokens);
+            }
+        },
+        FormExpr::Map(bsme) => match &bsme.0 {
+            MapExpr(spairs) => {
+                for (key, val) in spairs {
+                    semantic_token_from_form_expr(key, semantic_tokens);
+                    semantic_token_from_form_expr(val, semantic_tokens);
+                }
+            }
+        },
+    }
 }
