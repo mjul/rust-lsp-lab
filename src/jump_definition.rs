@@ -1,8 +1,12 @@
+use chumsky::error::Simple;
+use chumsky::Parser;
+use im_rc::Vector;
 use std::collections::HashMap;
 
-use im_rc::Vector;
-
-use crate::chumsky::{Expr, FormsExpr, Func, Spanned};
+use crate::chumsky::{
+    defn_parser, Defn, Expr, FormExpr, FormsExpr, Func, ImCompleteSemanticToken, ListExpr, MapExpr,
+    Spanned, VectorExpr,
+};
 /// return (need_to_continue_search, founded reference)
 pub fn get_definition(ast: &HashMap<String, Func>, ident_offset: usize) -> Option<Spanned<String>> {
     let mut vector = Vector::new();
@@ -18,7 +22,7 @@ pub fn get_definition(ast: &HashMap<String, Func>, ident_offset: usize) -> Optio
     for (_, v) in ast.iter() {
         let args = v.args.iter().cloned().collect::<Vector<_>>();
         if let (_, Some(value)) =
-            get_definition_of_expr(&v.body, args + vector.clone(), ident_offset)
+            get_definition_of_forms_expr(&v.body, args + vector.clone(), ident_offset)
         {
             return Some(value);
         }
@@ -26,43 +30,62 @@ pub fn get_definition(ast: &HashMap<String, Func>, ident_offset: usize) -> Optio
     None
 }
 
-pub fn get_definition_of_expr(
+/// return (need_to_continue_search, founded reference)
+fn get_definition_of_forms_expr(
     expr: &Spanned<FormsExpr>,
     definition_ass_list: Vector<Spanned<String>>,
     ident_offset: usize,
 ) -> (bool, Option<Spanned<String>>) {
-    /*
     match &expr.0 {
-        Expr::Error => (true, None),
-        Expr::Value(_) => (true, None),
-        Expr::List(exprs) => exprs
-            .iter()
-            .for_each(|expr| get_definition(expr, definition_ass_list)),
-        Expr::Local(local) => {
-            if ident_offset >= local.1.start && ident_offset < local.1.end {
-                let index = definition_ass_list
-                    .iter()
-                    .position(|decl| decl.0 == local.0);
-                (
-                    false,
-                    index.map(|i| definition_ass_list.get(i).unwrap().clone()),
-                )
-            } else {
-                (true, None)
-            }
-        }
-        Expr::List(lst) => {
-            for expr in lst {
-                match get_definition_of_expr(expr, definition_ass_list.clone(), ident_offset) {
-                    (true, None) => continue,
-                    (true, Some(value)) => return (false, Some(value)),
-                    (false, None) => return (false, None),
-                    (false, Some(value)) => return (false, Some(value)),
+        FormsExpr(bsfes) => {
+            for fex in bsfes.iter() {
+                let (cont, def) =
+                    get_definition_of_form_expr(&fex, definition_ass_list.clone(), ident_offset);
+                match (cont, def) {
+                    (false, def) => return (false, def),
+                    _ => {
+                        // TODO
+                    }
                 }
             }
-            (true, None)
         }
-    }*/
+    }
+
     // TODO: implement this
     (true, None)
+}
+
+/// return (need_to_continue_search, founded reference)
+fn get_definition_of_form_expr(
+    expr: &Spanned<FormExpr>,
+    definition_ass_list: Vector<Spanned<String>>,
+    ident_offset: usize,
+) -> (bool, Option<Spanned<String>>) {
+    match &expr.0 {
+        FormExpr::Literal(bsle) => (true, None),
+        FormExpr::List(sles) => match &sles.0 {
+            ListExpr(sfes) => {
+                // TODO: introduce a higher-level semantical expression with e.g. def, defn and let-bound symbols so we don't have to parse here in the client code
+                // Handle defn
+                let result = Defn::try_from(expr.0.clone());
+                match result {
+                    Ok(defn) => (false, Some(defn.name)),
+                    Err(_) => {
+                        // Not a defn, check def and let or recurse
+                        // TODO: def and let
+                        // Otherwise, not interesting in itself, search the list elements:
+                        get_definition_of_forms_expr(
+                            sfes,
+                            definition_ass_list.clone(),
+                            ident_offset,
+                        )
+                    }
+                }
+            }
+        },
+        FormExpr::Vector(bsve) => match &bsve.0 {
+            VectorExpr(sfes) => (true, None),
+        },
+        FormExpr::Map(bsme) => (true, None),
+    }
 }

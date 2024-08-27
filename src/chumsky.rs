@@ -689,14 +689,25 @@ fn expr_parser() -> impl Parser<LiteralExpr, Spanned<Expr>, Error = Simple<Liter
 }
 
 /// A `defn` declaration
-struct Defn {
+#[derive(Debug)]
+pub(crate) struct Defn {
     defn: Spanned<String>,
-    name: Spanned<String>,
+    pub(crate) name: Spanned<String>,
     doc_comment: Option<Spanned<String>>,
     args: Spanned<String>,
     body: Spanned<FormsExpr>,
     span: Span,
 }
+
+impl TryFrom<FormExpr> for Defn {
+    type Error = ();
+
+    fn try_from(value: FormExpr) -> Result<Self, Self::Error> {
+        let result = defn_parser().parse(vec![value]);
+        result.map_err(|e|())
+    }
+}
+
 
 /// Parse a `FormExpr` into a `Defn` if it matches the proper `(defn f [] ...)` list form.
 pub fn defn_parser() -> impl Parser<FormExpr, Defn, Error = Simple<FormExpr>> + Clone {
