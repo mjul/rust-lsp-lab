@@ -2,14 +2,13 @@
 //! See the complete ANTLR 4 grammar here:
 //! https://github.com/antlr/grammars-v4/blob/master/clojure/Clojure.g4
 
-use core::fmt;
-use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
-
 use crate::semantic_token::LEGEND_TYPE;
 use chumsky::Parser;
 use chumsky::{prelude::*, stream::Stream};
+use core::fmt;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use tower_lsp::lsp_types::SemanticTokenType;
 
 pub type Span = std::ops::Range<usize>;
@@ -380,6 +379,12 @@ impl From<Vec<Spanned<FormExpr>>> for FormsExpr {
 /// ```
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub struct ListExpr(pub(crate) Spanned<FormsExpr>);
+
+impl ListExpr {
+    pub(crate) fn new(value: Spanned<FormsExpr>) -> Self {
+        ListExpr(value)
+    }
+}
 
 /// Vector expression:
 /// ```EBNF
