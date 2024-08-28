@@ -57,7 +57,7 @@ fn get_definition_of_form_expr(
     ident_offset: usize,
 ) -> (bool, Option<Spanned<String>>) {
     match &expr.0 {
-        FormExpr::Literal(bsle) => (true, None),
+        FormExpr::Literal(_bsle) => (true, None),
         FormExpr::List(sles) => match &sles.0 {
             ListExpr(sfes) => {
                 // TODO: introduce a higher-level semantical expression with e.g. def, defn and let-bound symbols so we don't have to parse here in the client code
@@ -79,8 +79,8 @@ fn get_definition_of_form_expr(
             }
         },
         FormExpr::Vector(bsve) => match &bsve.0 {
-            VectorExpr(sfes) => (true, None),
+            VectorExpr(_sfes) => (true, None),
         },
-        FormExpr::Map(bsme) => (true, None),
+        FormExpr::Map(_bsme) => (true, None),
     }
 }

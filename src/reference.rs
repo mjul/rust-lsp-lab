@@ -3,14 +3,12 @@ use std::collections::HashMap;
 use chumsky::Span;
 use im_rc::Vector;
 
-
 use crate::chumsky::{FormExpr, FormsExpr, Func, ListExpr, Spanned};
 #[derive(Debug, Clone)]
 pub enum ReferenceSymbol {
     Founded(Spanned<String>),
     Founding(usize),
 }
-use ReferenceSymbol::*;
 pub fn get_reference(
     ast: &HashMap<String, Func>,
     ident_offset: usize,

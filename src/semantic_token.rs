@@ -68,7 +68,7 @@ fn semantic_token_from_form_expr(
     semantic_tokens: &mut Vec<ImCompleteSemanticToken>,
 ) {
     match &expr.0 {
-        FormExpr::Literal(bsle) => {
+        FormExpr::Literal(_bsle) => {
             // Do nothing, literals are tagged in the parser
         }
         FormExpr::List(sles) => match &sles.0 {

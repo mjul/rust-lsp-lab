@@ -381,12 +381,6 @@ impl From<Vec<Spanned<FormExpr>>> for FormsExpr {
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub struct ListExpr(pub(crate) Spanned<FormsExpr>);
 
-impl ListExpr {
-    pub(crate) fn new(value: Spanned<FormsExpr>) -> Self {
-        ListExpr(value)
-    }
-}
-
 /// Vector expression:
 /// ```EBNF
 ///   vector : '[' forms ']' ;
@@ -704,13 +698,12 @@ impl TryFrom<FormExpr> for Defn {
 
     fn try_from(value: FormExpr) -> Result<Self, Self::Error> {
         let result = defn_parser().parse(vec![value]);
-        result.map_err(|e|())
+        result.map_err(|_e| ())
     }
 }
 
-
 /// Parse a `FormExpr` into a `Defn` if it matches the proper `(defn f [] ...)` list form.
-pub fn defn_parser() -> impl Parser<FormExpr, Defn, Error = Simple<FormExpr>> + Clone {
+pub(crate) fn defn_parser() -> impl Parser<FormExpr, Defn, Error = Simple<FormExpr>> + Clone {
     filter_map::<_, Defn, _, Simple<FormExpr>>(|form_span, form| {
         match &form {
             FormExpr::List(bsle) => {
