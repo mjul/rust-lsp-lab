@@ -135,7 +135,16 @@ mod tests {
     #[test]
     pub fn can_get_definition_for_function_when_cursor_is_inside_function_name() {
         let ast = just_defn_foobar();
+        // 8 is inside the foobar name
         let actual = get_definition(&ast, 8);
         assert_eq!(Some(Spanned::new(String::from("foobar"), 6..12)), actual);
+    }
+
+    #[test]
+    pub fn can_get_definition_for_function_when_cursor_is_on_unknown_function_name() {
+        let ast = just_defn_foobar();
+        // 19 is inside the "inc" function name
+        let actual = get_definition(&ast, 19);
+        assert_eq!(None, actual);
     }
 }
