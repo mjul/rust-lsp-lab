@@ -1,12 +1,7 @@
-use chumsky::error::Simple;
-use chumsky::Parser;
 use im_rc::Vector;
 use std::collections::HashMap;
 
-use crate::chumsky::{
-    defn_parser, Defn, Expr, FormExpr, FormsExpr, Func, ImCompleteSemanticToken, ListExpr, MapExpr,
-    Spanned, VectorExpr,
-};
+use crate::chumsky::{Defn, FormExpr, FormsExpr, Func, ListExpr, Spanned, VectorExpr};
 /// return (need_to_continue_search, founded reference)
 pub fn get_definition(ast: &HashMap<String, Func>, ident_offset: usize) -> Option<Spanned<String>> {
     let mut vector = Vector::new();
