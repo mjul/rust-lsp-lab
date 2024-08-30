@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use tower_lsp::lsp_types::SemanticTokenType;
 
 use crate::chumsky::{
-    FormExpr, FormsExpr, Func, ImCompleteSemanticToken, ListExpr, MapExpr, Spanned, VectorExpr,
+    FormExpr, FormsExpr, Func, ImCompleteSemanticToken, ListExpr, MapExpr, Span, Spanned,
+    VectorExpr,
 };
 
 pub const LEGEND_TYPE: &[SemanticTokenType] = &[
@@ -17,6 +18,14 @@ pub const LEGEND_TYPE: &[SemanticTokenType] = &[
     SemanticTokenType::PARAMETER,
 ];
 
+fn token_for(span: &Span, t: &SemanticTokenType) -> ImCompleteSemanticToken {
+    ImCompleteSemanticToken {
+        start: span.start,
+        length: span.len(),
+        token_type: LEGEND_TYPE.iter().position(|item| item == t).unwrap(),
+    }
+}
+
 /// Add semantic tokens from the AST.
 /// Note that the parser also emits low-level semantic tokens for e.g. literals.
 pub fn semantic_token_from_ast(ast: &HashMap<String, Func>) -> Vec<ImCompleteSemanticToken> {
@@ -24,24 +33,10 @@ pub fn semantic_token_from_ast(ast: &HashMap<String, Func>) -> Vec<ImCompleteSem
 
     ast.iter().for_each(|(_func_name, function)| {
         function.args.iter().for_each(|(_, span)| {
-            semantic_tokens.push(ImCompleteSemanticToken {
-                start: span.start,
-                length: span.len(),
-                token_type: LEGEND_TYPE
-                    .iter()
-                    .position(|item| item == &SemanticTokenType::PARAMETER)
-                    .unwrap(),
-            });
+            semantic_tokens.push(token_for(span, &SemanticTokenType::PARAMETER));
         });
         let (_, span) = &function.name;
-        semantic_tokens.push(ImCompleteSemanticToken {
-            start: span.start,
-            length: span.len(),
-            token_type: LEGEND_TYPE
-                .iter()
-                .position(|item| item == &SemanticTokenType::FUNCTION)
-                .unwrap(),
-        });
+        semantic_tokens.push(token_for(span, &SemanticTokenType::FUNCTION));
         semantic_token_from_forms_expr(&function.body, &mut semantic_tokens);
     });
 
