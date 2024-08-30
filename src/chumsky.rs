@@ -909,6 +909,7 @@ pub fn funcs_parser(
             let body_span_start = body_forms.first().map_or(form_span.end, |x| x.1.start);
             let body_span_end = body_forms.last().map_or(form_span.end, |x| x.1.end);
             let body_span = body_span_start..body_span_end;
+            // TODO: fill out the args
             let func = Func {
                 args: vec![],
                 body: (FormsExpr(Box::new(body_forms)), body_span),
