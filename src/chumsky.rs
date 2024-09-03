@@ -760,22 +760,22 @@ pub(crate) fn defn_parser() -> impl Parser<FormExpr, Defn, Error = Simple<FormEx
                                                                                 unreachable!()
                                                                             };
                                                                             match &bsle.0 {
-                                                                            LiteralExpr::Symbol(s) => {
-                                                                                fn_args.push(Spanned::new(s.clone(), bsle.1.clone()));
-                                                                            },
-                                                                            _ => {
-                                                                                errs.push(Simple::custom(
-                                                                                    bsle.1.clone(),
-                                                                                    "Arg is not a symbol literal",
-                                                                                ));
-                                                                            }
-                                                                        }
+                                                                                    LiteralExpr::Symbol(s) => {
+                                                                                        fn_args.push(Spanned::new(s.clone(), bsle.1.clone()));
+                                                                                    }
+                                                                                    _ => {
+                                                                                        errs.push(Simple::custom(
+                                                                                            bsle.1.clone(),
+                                                                                            "Arg is not a symbol literal",
+                                                                                        ));
+                                                                                    }
+                                                                                }
                                                                         } else {
                                                                             //TODO: error, arg is not a literal
                                                                             errs.push(Simple::custom(
-                                                                            fe_span.clone(),
-                                                                            "Arg is not a literal",
-                                                                        ));
+                                                                                    fe_span.clone(),
+                                                                                    "Arg is not a literal",
+                                                                                ));
                                                                         }
                                                                     }
                                                                     if errs.is_empty() {
@@ -841,82 +841,26 @@ pub(crate) fn defn_parser() -> impl Parser<FormExpr, Defn, Error = Simple<FormEx
 /// Parser that extracts the functions
 pub fn funcs_parser(
 ) -> impl Parser<FileExpr, HashMap<String, Func>, Error = Simple<FileExpr>> + Clone {
-    // TODO: simplify using the defn_parser above
-
-    fn try_get_list_symbol_symbol_rest(
-        (form, form_span): &Spanned<FormExpr>,
-    ) -> Option<((String, Span), (String, Span), Vec<Spanned<FormExpr>>, Span)> {
-        match &form {
-            FormExpr::Literal(_) => None,
-            FormExpr::List(sle) => match &**sle {
-                (ListExpr((list_forms, _list_forms_span)), _list_expr_span) => match list_forms {
-                    FormsExpr(vec_form_expr) => match &vec_form_expr[..] {
-                        [(FormExpr::Literal(defn_form_expr), defn_span), (FormExpr::Literal(name_form_expr), name_span), rest @ ..] =>
-                        {
-                            match (&**defn_form_expr, &**name_form_expr) {
-                                // Starts with two symbols, e.g. (defn foo [x] (inc x)
-                                (
-                                    (LiteralExpr::Symbol(defn), _),
-                                    (LiteralExpr::Symbol(name), _),
-                                ) => {
-                                    // everything in the list except the two initial symbols for defn and the name
-                                    let rest_forms = rest.into_iter().map(|x| x.clone()).collect();
-                                    Some((
-                                        (defn.clone(), defn_span.clone()),
-                                        (name.clone(), name_span.clone()),
-                                        rest_forms,
-                                        form_span.clone(),
-                                    ))
-                                }
-                                _ => None,
-                            }
-                        }
-                        _ => None,
-                    },
-                },
-            },
-            FormExpr::Vector(_) => None,
-            FormExpr::Map(_) => None,
-        }
-    }
-
     any::<_, Simple<FileExpr>>().then_ignore(end()).map(|x| {
         let FileExpr::Forms(top_level_forms) = x;
-        let lists_with_two_symbol_heads = top_level_forms
-            .iter()
-            .filter_map(|x| try_get_list_symbol_symbol_rest(x));
-        let defns = lists_with_two_symbol_heads
-            .filter(|((s1, _s1_span), (_name, _name_span), _rest_forms, _form_span)| s1 == "defn");
         let mut funcs = HashMap::<String, Func>::new();
-        for ((_s1, _s1_span), (name, name_span), rest_forms, form_span) in defns {
-            let mut inner = rest_forms.into_iter().peekable();
-            match inner.peek() {
-                Some((FormExpr::Literal(le), _span)) => match &**le {
-                    (LiteralExpr::Str(_doc_comment), _span) => {
-                        inner.next();
-                    }
-                    _ => {}
-                },
-                _ => {}
-            }
-            match inner.peek() {
-                Some((FormExpr::Vector(_args), _span)) => {
-                    inner.next();
+        for (form, form_span) in top_level_forms {
+            match defn_parser().parse(vec![form]) {
+                Ok(defn) => {
+                    funcs.insert(
+                        defn.name.0.clone(),
+                        Func {
+                            args: defn.args,
+                            body: defn.body,
+                            name: defn.name,
+                            span: defn.span,
+                        },
+                    );
                 }
-                _ => {}
+                Err(_) => {
+                    // not a defn, ignore
+                }
             }
-            let body_forms: Vec<Spanned<FormExpr>> = inner.collect();
-            let body_span_start = body_forms.first().map_or(form_span.end, |x| x.1.start);
-            let body_span_end = body_forms.last().map_or(form_span.end, |x| x.1.end);
-            let body_span = body_span_start..body_span_end;
-            // TODO: fill out the args
-            let func = Func {
-                args: vec![],
-                body: (FormsExpr(Box::new(body_forms)), body_span),
-                name: (name.to_string(), name_span.clone()),
-                span: form_span.clone(),
-            };
-            funcs.insert(name.clone(), func);
         }
         funcs
     })
